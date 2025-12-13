@@ -1,0 +1,19 @@
+# Python stuff
+__pycache__/
+*.py[cod]
+venv/
+.env
+
+# PyCharm settings
+.idea/
+
+# Datasets (Do NOT upload images to git)
+data/
+*.jpg
+*.png
+*.pgm
+
+# Model weights (Checkpoints are heavy)
+*.pth
+*.pt
+checkpoints/

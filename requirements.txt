@@ -1,0 +1,18 @@
+# --- Deep Learning Framework (PyTorch) ---
+torch
+torchvision
+torchaudio
+
+# --- Image Processing ---
+numpy
+opencv-python
+Pillow
+
+# --- Data & Metrics ---
+pandas
+scikit-learn
+matplotlib
+
+# --- User Interface & Utilities ---
+click
+tqdm
