@@ -1,39 +1,47 @@
-import torch
-import torch.nn as nn
-from models.srnet import SRNet
-from training.trainer import SRNetTrainer
+import os
+from training.train_hybrid import evolutionary_training
 
-def run_sanity_check():
-    print("Starting SRNet Sanity Check...")
 
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"Device: {device}")
+def check_data_setup():
+    """
+    Verifies that the dataset is correctly placed in 'data/raw'.
+    """
+    data_path = os.path.join("data", "raw")
 
-    try:
-        model = SRNet(num_classes=2)
-        print(f"SRNet model loaded successfully!")
-        print(f"Total parameters: {sum(p.numel() for p in model.parameters()):,}")
-    except Exception as e:
-        print(f"Failed to load SRNet: {e}")
-        return
+    # 1. Check if folder exists
+    if not os.path.exists(data_path):
+        os.makedirs(data_path)
+        print(f"[WARN] Created missing folder: {data_path}")
+        print("   -> Please move your Flickr/Dataset images into this folder.")
+        return False
 
-    try:
-        dummy_input = torch.randn(4, 1, 256, 256).to(device)
-        dummy_labels = torch.tensor([0, 1, 0, 1]).to(device)
+    # 2. Count images
+    # We support jpg, jpeg, png
+    valid_exts = ('.jpg', '.jpeg', '.png')
+    files = [f for f in os.listdir(data_path) if f.lower().endswith(valid_exts)]
 
-        trainer = SRNetTrainer(model, device)
-        criterion = nn.CrossEntropyLoss()
-        optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    if len(files) < 20:
+        print(f"[ERROR] Found only {len(files)} images in '{data_path}'.")
+        print("   To see real learning, you need at least 50-100 images.")
+        print("   (Tip: Did you unzip them into a sub-folder? Move them directly to data/raw)")
+        return False
 
-        print("\nRunning a dummy training step...")
-        loss, acc = trainer.train_step(dummy_input, dummy_labels, optimizer, criterion)
-
-        print(f"Success! Step completed.")
-        print(f"Loss: {loss:.4f}, Accuracy: {acc * 100:.1f}%")
-
-    except Exception as e:
-        print(f"Error during runtime: {e}")
+    print(f"[OK] Found {len(files)} images ready for training.")
+    return True
 
 
 if __name__ == "__main__":
-    run_sanity_check()
+    print("==========================================")
+    print("       Steganography Defense System       ")
+    print("         Evolutionary Pilot Run           ")
+    print("==========================================")
+
+    if check_data_setup():
+        try:
+            # Launch the training loop from training/train_hybrid.py
+            evolutionary_training()
+        except KeyboardInterrupt:
+            print("\n[STOP] Training stopped by user.")
+        except Exception as e:
+            print(f"\n[CRITICAL] Error during training: {e}")
+            raise e
