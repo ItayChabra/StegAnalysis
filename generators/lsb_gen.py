@@ -47,14 +47,15 @@ class LSBGenerator(BaseGenerator):
               bit_depth=1, edge_threshold=0,
               capacity_ratio=0.5):
 
-        # 1. Load & Resize
+        # 1. Load
         try:
             img = Image.open(cover_path).convert('L')
         except Exception:
             return None, 0
 
-        if img.size != self.target_size:
-            img = img.resize(self.target_size, Image.Resampling.LANCZOS)
+        # Remove this!
+        # if img.size != self.target_size:
+        #     img = img.resize(self.target_size, Image.Resampling.LANCZOS)
 
         img_array = np.array(img, dtype=np.uint8)
         flat_img = img_array.flatten()
