@@ -4,12 +4,14 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="94558183-8a49-42f9-a799-19f5f2d0f95c" name="Changes" comment="Removed lsb image resize from lsb generator">
+    <list default="true" id="94558183-8a49-42f9-a799-19f5f2d0f95c" name="Changes" comment="Changed SRNet to include SRM Filters at layer 1 after finding out random weights make the SRNet get stuck at 50% accuracy (guessing) at all epochs.&#10;Changed training so that the model will start on &quot;Easy Mode&quot; rather than it getting hard genomes from the get go, making it very hard for him to learn.&#10;Added Second Dataset of pgm photos support.">
       <change afterPath="$PROJECT_DIR$/StegoLSBDatasetTest.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/generators/lsb_gen.py" beforeDir="false" afterPath="$PROJECT_DIR$/generators/lsb_gen.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/models/srnet.py" beforeDir="false" afterPath="$PROJECT_DIR$/models/srnet.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/test_overfitting.py" beforeDir="false" afterPath="$PROJECT_DIR$/test_overfitting.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/training/train_hybrid.py" beforeDir="false" afterPath="$PROJECT_DIR$/training/train_hybrid.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/utils/plot_results.py" beforeDir="false" afterPath="$PROJECT_DIR$/utils/plot_results.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -58,6 +60,7 @@
     "Python.debug_speed.executor": "Run",
     "Python.lsb_gen.executor": "Run",
     "Python.main.executor": "Run",
+    "Python.plot_results.executor": "Run",
     "Python.test_overfitting.executor": "Run",
     "Python.train_hybrid.executor": "Run",
     "RunOnceActivity.MCP Project settings loaded": "true",
@@ -105,7 +108,7 @@
       <workItem from="1767018013445" duration="172000" />
       <workItem from="1767086834833" duration="8767000" />
       <workItem from="1767104063414" duration="16224000" />
-      <workItem from="1768399144817" duration="15952000" />
+      <workItem from="1768399144817" duration="61110000" />
     </task>
     <task id="LOCAL-00001" summary="First commit">
       <option name="closed" value="true" />
@@ -139,7 +142,15 @@
       <option name="project" value="LOCAL" />
       <updated>1768401340926</updated>
     </task>
-    <option name="localTasksCounter" value="5" />
+    <task id="LOCAL-00005" summary="Changed SRNet to include SRM Filters at layer 1 after finding out random weights make the SRNet get stuck at 50% accuracy (guessing) at all epochs.&#10;Changed training so that the model will start on &quot;Easy Mode&quot; rather than it getting hard genomes from the get go, making it very hard for him to learn.&#10;Added Second Dataset of pgm photos support.">
+      <option name="closed" value="true" />
+      <created>1768421382456</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1768421382456</updated>
+    </task>
+    <option name="localTasksCounter" value="6" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -160,19 +171,21 @@
     <MESSAGE value="First commit" />
     <MESSAGE value="This is working!&#10;Added &quot;capacity ratio&quot; hyperparameter to lsb generator&#10;Improved training process" />
     <MESSAGE value="Removed lsb image resize from lsb generator" />
-    <option name="LAST_COMMIT_MESSAGE" value="Removed lsb image resize from lsb generator" />
+    <MESSAGE value="Changed SRNet to include SRM Filters at layer 1 after finding out random weights make the SRNet get stuck at 50% accuracy (guessing) at all epochs.&#10;Changed training so that the model will start on &quot;Easy Mode&quot; rather than it getting hard genomes from the get go, making it very hard for him to learn.&#10;Added Second Dataset of pgm photos support." />
+    <option name="LAST_COMMIT_MESSAGE" value="Changed SRNet to include SRM Filters at layer 1 after finding out random weights make the SRNet get stuck at 50% accuracy (guessing) at all epochs.&#10;Changed training so that the model will start on &quot;Easy Mode&quot; rather than it getting hard genomes from the get go, making it very hard for him to learn.&#10;Added Second Dataset of pgm photos support." />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/PycharmProjects$LSB_Sanity_Check.coverage" NAME="LSB_Sanity_Check Coverage Results" MODIFIED="1767123937703" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
-    <SUITE FILE_PATH="coverage/StegAnalysis$main.coverage" NAME="main Coverage Results" MODIFIED="1766328189278" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
-    <SUITE FILE_PATH="coverage/PycharmProjects$lsb_gen.coverage" NAME="lsb_gen Coverage Results" MODIFIED="1767105374522" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/generators" />
-    <SUITE FILE_PATH="coverage/PycharmProjects$test_overfitting.coverage" NAME="test_overfitting Coverage Results" MODIFIED="1767106280779" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
-    <SUITE FILE_PATH="coverage/PycharmProjects$Debug_GPU.coverage" NAME="Debug_GPU Coverage Results" MODIFIED="1767096030995" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
-    <SUITE FILE_PATH="coverage/PycharmProjects$StegoLSBDatasetTest.coverage" NAME="StegoLSBDatasetTest Coverage Results" MODIFIED="1767122480796" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/PycharmProjects$LSB_Sanity_Check.coverage" NAME="LSB_Sanity_Check Coverage Results" MODIFIED="1768736581834" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/StegAnalysis$lsb_gen.coverage" NAME="lsb_gen Coverage Results" MODIFIED="1765641911781" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/generators" />
-    <SUITE FILE_PATH="coverage/PycharmProjects$main.coverage" NAME="main Coverage Results" MODIFIED="1768414281796" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
-    <SUITE FILE_PATH="coverage/StegAnalysis$test_overfitting.coverage" NAME="test_overfitting Coverage Results" MODIFIED="1766328781394" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/PycharmProjects$main.coverage" NAME="main Coverage Results" MODIFIED="1768668501805" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/PycharmProjects$plot_results.coverage" NAME="plot_results Coverage Results" MODIFIED="1768740783152" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/utils" />
     <SUITE FILE_PATH="coverage/PycharmProjects$debug_speed.coverage" NAME="debug_speed Coverage Results" MODIFIED="1767095419925" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
-    <SUITE FILE_PATH="coverage/PycharmProjects$train_hybrid.coverage" NAME="train_hybrid Coverage Results" MODIFIED="1768403326815" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/training" />
+    <SUITE FILE_PATH="coverage/StegAnalysis$main.coverage" NAME="main Coverage Results" MODIFIED="1766328189278" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/PycharmProjects$lsb_gen.coverage" NAME="lsb_gen Coverage Results" MODIFIED="1768647875542" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/generators" />
+    <SUITE FILE_PATH="coverage/PycharmProjects$test_overfitting.coverage" NAME="test_overfitting Coverage Results" MODIFIED="1768740961122" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/PycharmProjects$Debug_GPU.coverage" NAME="Debug_GPU Coverage Results" MODIFIED="1767096030995" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/PycharmProjects$StegoLSBDatasetTest.coverage" NAME="StegoLSBDatasetTest Coverage Results" MODIFIED="1768742843615" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/StegAnalysis$test_overfitting.coverage" NAME="test_overfitting Coverage Results" MODIFIED="1766328781394" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/PycharmProjects$train_hybrid.coverage" NAME="train_hybrid Coverage Results" MODIFIED="1768647776258" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/training" />
   </component>
 </project>

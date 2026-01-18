@@ -12,7 +12,6 @@ from torchvision import transforms
 import torchvision.transforms.functional as TF
 import random
 import copy
-import time
 import json
 import uuid
 import string
@@ -27,7 +26,9 @@ DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 cudnn.benchmark = True
 INITIAL_LR = 0.0001
-MAX_LR = 0.001
+MAX_LR = 0.001  # Restored from 0.0003
+MIN_CAPACITY = 0.20  # Prevent generators from going too subtle
+MAX_CAPACITY = 0.75
 
 
 class EvolutionaryManager:
@@ -45,7 +46,7 @@ class EvolutionaryManager:
             'step': random.randint(1, 15),
             'bit_depth': 1,
             'edge_threshold': random.randint(0, 100),
-            'capacity_ratio': random.uniform(0.1, 0.7),
+            'capacity_ratio': random.uniform(MIN_CAPACITY, MAX_CAPACITY),  # Constrained
         })
         return genome
 
@@ -65,7 +66,8 @@ class EvolutionaryManager:
                 new_genome['strategy'] = random.choice(['random', 'sequential', 'skip'])
             elif mutation == 'capacity':
                 change = random.uniform(-0.15, 0.15)
-                new_genome['capacity_ratio'] = max(0.05, min(0.8, new_genome['capacity_ratio'] + change))
+                new_genome['capacity_ratio'] = max(MIN_CAPACITY,
+                                                   min(MAX_CAPACITY, new_genome['capacity_ratio'] + change))
         return new_genome
 
     def crossover(self, genome1, genome2):
@@ -97,7 +99,8 @@ class EvolutionaryManager:
         for i in range(min(3, len(sorted_pop))):
             g = sorted_pop[i]
             score = final_scores.get(g['name'], 0) * 100
-            print(f"  #{i + 1}: {g['name']} - {score:.2f}% | Strat: {g['strategy']} Cap: {g['capacity_ratio']:.2f}")
+            print(
+                f"  #{i + 1}: {g['name']} - {score:.2f}% | Strat: {g['strategy']} | Cap: {g['capacity_ratio']:.2f} | Edge: {g['edge_threshold']}")
 
         new_pop = sorted_pop[:3]
         if len(sorted_pop) >= 2: new_pop.append(self.crossover(sorted_pop[0], sorted_pop[1]))
@@ -111,7 +114,8 @@ class EvolutionaryManager:
         return sorted_pop[0]
 
     def get_random_genome(self):
-        if self.generation == 0 or random.random() < 0.3: return random.choice(self.population)
+        if self.generation == 0 or random.random() < 0.3:
+            return random.choice(self.population)
         weights = []
         for g in self.population:
             data = self.stats[g['name']]
@@ -158,13 +162,15 @@ def adjust_learning_rate(optimizer, epoch):
         lr = MAX_LR
     else:
         lr = MAX_LR * 0.97 ** (epoch - 20)
-    for param_group in optimizer.param_groups: param_group['lr'] = lr
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
     return lr
 
 
 def run_training():
     print(f"🚀 Starting Hybrid 50/50 Training on {DEVICE}")
     lossy_files, lossless_files = load_balanced_dataset('data/raw')
+
     discriminator = SRNet().to(DEVICE)
     optimizer = optim.Adam(discriminator.parameters(), lr=INITIAL_LR, weight_decay=1e-4)
     criterion = nn.CrossEntropyLoss()
@@ -179,7 +185,27 @@ def run_training():
 
     for epoch in range(EPOCHS):
         current_lr = adjust_learning_rate(optimizer, epoch)
-        print(f"\n{'=' * 60}\nEpoch {epoch + 1}/{EPOCHS} | LR: {current_lr:.6f}\n{'=' * 60}")
+
+        # Calculate curriculum parameters for this epoch
+        if epoch < 10:  # Shortened from 12
+            min_capacity = max(MIN_CAPACITY, 1.0 - (epoch * 0.08))  # Respects MIN_CAPACITY floor
+            max_edge_threshold = min(70, epoch * 7)  # 0 → 70 over 10 epochs
+            curriculum_active = True
+        else:
+            min_capacity = MIN_CAPACITY
+            max_edge_threshold = 100
+            curriculum_active = False
+
+        print(f"\n{'=' * 60}")
+        print(f"Epoch {epoch + 1}/{EPOCHS} | LR: {current_lr:.6f}")
+        if curriculum_active:
+            print(f"📚 Curriculum: Cap [{min_capacity:.2f}-1.0] | Edge [0-{max_edge_threshold}]")
+        else:
+            if epoch == 10:  # Changed from 12
+                print(f"🧬 EVOLUTION ACTIVATED - Full competitive training begins!")
+            else:
+                print(f"🧬 Evolution Active")
+        print('=' * 60)
 
         random.shuffle(lossy_files)
         random.shuffle(lossless_files)
@@ -205,28 +231,32 @@ def run_training():
                 temp_cover_path = f"temp_{temp_id}.png"
 
                 try:
-                    # --- CURRICULUM: FORCE "EASY MODE" FOR FIRST 5 EPOCHS ---
-                    if epoch < 5:
-                        # Force high capacity so the signal is "Loud"
-                        genome['edge_threshold'] = 0  # Use ALL pixels
-                        genome['capacity_ratio'] = 1.0  # 100% capacity
-                        genome['strategy'] = 'random'  # Spread everywhere
-                    # --------------------------------------------------------
-
                     cover_img = Image.open(path).convert('L')
                     w, h = cover_img.size
                     if w < 256 or h < 256: continue
-                    i_crop, j_crop, h_crop, w_crop = transforms.RandomCrop.get_params(cover_img, output_size=(256, 256))
+
+                    i_crop, j_crop, h_crop, w_crop = transforms.RandomCrop.get_params(
+                        cover_img, output_size=(256, 256))
                     cover_crop = TF.crop(cover_img, i_crop, j_crop, h_crop, w_crop)
                     cover_crop.save(temp_cover_path)
 
                     genome_with_capacity = genome.copy()
 
+                    # --- GRADUAL CURRICULUM LEARNING ---
+                    if curriculum_active:
+                        # Override genome parameters with curriculum constraints
+                        genome_with_capacity['capacity_ratio'] = random.uniform(min_capacity, 1.0)
+                        genome_with_capacity['edge_threshold'] = random.randint(0, max_edge_threshold)
+                        # Early epochs: prefer random strategy for better coverage
+                        if epoch < 5:
+                            genome_with_capacity['strategy'] = 'random'
+
+                    # Message strategy
                     if epoch < 5:
-                        # In Easy Mode, always use random bits for max entropy
+                        # Early: Always random bits for max entropy
                         genome_with_capacity['message'] = None
                     else:
-                        # Normal mode: Mix text and random
+                        # Later: Mix text and random
                         if random.random() < 0.5:
                             genome_with_capacity['message'] = generate_long_text_message(length=5000)
                         else:
@@ -235,44 +265,54 @@ def run_training():
                     if 'capacity_ratio' not in genome_with_capacity:
                         genome_with_capacity['capacity_ratio'] = 0.5
 
+                    # Generate stego
                     stego_arr, _ = unified_gen.generate_stego(temp_cover_path, None, genome_with_capacity)
                     if stego_arr is None: continue
                     stego_img = Image.fromarray(stego_arr)
 
+                    # Add to batch
                     inputs.append(to_tensor(cover_crop))
                     labels.append(0)
                     batch_genome_names.append(None)
+
                     inputs.append(to_tensor(stego_img))
                     labels.append(1)
                     batch_genome_names.append(genome['name'])
+
                 except Exception:
                     continue
                 finally:
-                    if os.path.exists(temp_cover_path): os.remove(temp_cover_path)
+                    if os.path.exists(temp_cover_path):
+                        os.remove(temp_cover_path)
 
             if not inputs: continue
 
             inputs_t = torch.stack(inputs).to(DEVICE)
             labels_t = torch.tensor(labels).to(DEVICE)
 
-            # --- DIAGNOSTIC CHECK (Start of run) ---
+            # --- DIAGNOSTIC CHECK (First batch of first epoch) ---
             if epoch == 0 and step == 0:
-                print("\n" + "=" * 60 + "\n🔍 DIAGNOSTIC CHECK (Curriculum Mode)\n" + "=" * 60)
+                print("\n" + "=" * 60)
+                print("🔍 DIAGNOSTIC CHECK")
+                print("=" * 60)
                 covers = inputs_t[0::2].cpu().numpy()
                 stegos = inputs_t[1::2].cpu().numpy()
                 diff = np.abs(covers - stegos)
                 print(f"  Max Pixel Diff: {diff.max():.6f}")
+                print(f"  Mean Pixel Diff: {diff.mean():.6f}")
                 print(f"  Pixels Modified: {(diff > 0).sum():,} / {diff.size:,}")
                 mod_rate = 100 * (diff > 0).sum() / diff.size
-                print(f"  Mod Rate: {mod_rate:.2f}% (Expect ~50% in Easy Mode)")
+                print(f"  Modification Rate: {mod_rate:.2f}%")
+                print(f"  Batch: {labels.count(0)} covers, {labels.count(1)} stegos")
                 print("=" * 60 + "\n")
-            # ---------------------------------------
 
+            # Shuffle batch
             perm = torch.randperm(inputs_t.size(0))
             inputs_shuffled = inputs_t[perm]
             labels_shuffled = labels_t[perm]
             shuffled_genome_names = [batch_genome_names[idx] for idx in perm.tolist()]
 
+            # Training step
             optimizer.zero_grad()
             with torch.amp.autocast('cuda'):
                 outputs = discriminator(inputs_shuffled)
@@ -284,14 +324,16 @@ def run_training():
 
             _, preds = torch.max(outputs, 1)
 
-            relevant_names = []
-            fooled_results = []
-            for j, name in enumerate(shuffled_genome_names):
-                if name is not None:
-                    is_fooled = (preds[j].item() == 0)
-                    relevant_names.append(name)
-                    fooled_results.append(is_fooled)
-            evo_manager.update_batch_stats(relevant_names, fooled_results)
+            # Update evolution stats (only when curriculum is inactive)
+            if not curriculum_active:
+                relevant_names = []
+                fooled_results = []
+                for j, name in enumerate(shuffled_genome_names):
+                    if name is not None:
+                        is_fooled = (preds[j].item() == 0)
+                        relevant_names.append(name)
+                        fooled_results.append(is_fooled)
+                evo_manager.update_batch_stats(relevant_names, fooled_results)
 
             total_loss += loss.item()
             correct_total += (preds == labels_shuffled).sum().item()
@@ -301,21 +343,38 @@ def run_training():
                 acc_current = 100 * correct_total / total_samples
                 print(f"\rStep {step}/{steps_per_epoch} | Loss: {loss.item():.4f} | Acc: {acc_current:.1f}%", end="")
 
+        # End of Epoch Stats
         if total_samples > 0:
-            avg_loss = total_loss / (total_samples / (BATCH_SIZE * 2))
+            avg_loss = total_loss / steps_per_epoch
             acc_total = 100 * correct_total / total_samples
-            all_rates = [d['fooled'] / d['attempts'] for d in evo_manager.stats.values() if d['attempts'] > 0]
-            avg_gen_score = (sum(all_rates) / len(all_rates)) if all_rates else 0.0
 
-            print(
-                f"\n[EPOCH SUMMARY] Loss: {avg_loss:.4f} | Acc: {acc_total:.2f}% | Gen Fool: {avg_gen_score * 100:.2f}%")
+            if curriculum_active:
+                # During curriculum, evolution is paused
+                print(
+                    f"\n[EPOCH SUMMARY] Loss: {avg_loss:.4f} | Acc: {acc_total:.2f}% | 📚 Curriculum Active - Evolution Paused")
+                avg_gen_score = 0.0  # Not tracking during curriculum
+            else:
+                # Normal evolution tracking
+                all_rates = [d['fooled'] / d['attempts'] for d in evo_manager.stats.values() if d['attempts'] > 0]
+                avg_gen_score = (sum(all_rates) / len(all_rates)) if all_rates else 0.0
+                print(
+                    f"\n[EPOCH SUMMARY] Loss: {avg_loss:.4f} | Acc: {acc_total:.2f}% | Gen Fool: {avg_gen_score * 100:.2f}%")
+
             training_history['epochs'].append(epoch + 1)
             training_history['loss'].append(avg_loss)
             training_history['model_acc'].append(acc_total)
             training_history['gen_success'].append(avg_gen_score * 100)
             training_history['learning_rate'].append(current_lr)
 
-        best_genome = evo_manager.evolve()
+        # Only evolve when curriculum is inactive
+        if not curriculum_active:
+            best_genome = evo_manager.evolve()
+        else:
+            # During curriculum, just reset stats without evolution
+            evo_manager.generation += 1
+            evo_manager.stats = {g['name']: {'fooled': 0, 'attempts': 0} for g in evo_manager.population}
+            best_genome = evo_manager.population[0]  # Dummy for checkpoint
+
         if (epoch + 1) % 5 == 0:
             save_checkpoint(epoch + 1, discriminator, optimizer, best_genome, f"srnet_epoch_{epoch + 1}.pth")
 

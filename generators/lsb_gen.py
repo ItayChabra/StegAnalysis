@@ -32,7 +32,7 @@ class LSBGenerator(BaseGenerator):
         bit_depth = params.get('bit_depth', 1)
         edge_threshold = params.get('edge_threshold', 0)
         message = params.get('message', None)
-        capacity_ratio = params.get('capacity_ratio', 0.5)  # NEW parameter
+        capacity_ratio = params.get('capacity_ratio', 0.5)
 
         return self.embed(cover_path, output_path,
                           message=message,
@@ -53,44 +53,54 @@ class LSBGenerator(BaseGenerator):
         except Exception:
             return None, 0
 
-        # Remove this!
-        # if img.size != self.target_size:
-        #     img = img.resize(self.target_size, Image.Resampling.LANCZOS)
-
         img_array = np.array(img, dtype=np.uint8)
         flat_img = img_array.flatten()
         total_pixels = flat_img.size
 
-        # 2. Determine Available Pixels
+        # FIX 1: Calculate target based on TOTAL pixels (not available pixels)
+        target_pixels = int(total_pixels * capacity_ratio)
+        target_pixels = max(1, target_pixels)
+
+        # 2. Determine Available Pixels with Fallback
         if edge_threshold > 0:
             available_indices = self._get_complex_areas(img_array, edge_threshold)
+
+            # FIX 2: If not enough edge pixels, expand to all pixels (guaranteed capacity)
+            if len(available_indices) < target_pixels:
+                # Uncomment for debugging:
+                # print(f"[LSB WARNING] Edge threshold {edge_threshold} too high. "
+                #       f"Only {len(available_indices)} edge pixels, need {target_pixels}. "
+                #       f"Expanding to all pixels.")
+                available_indices = np.arange(total_pixels)
+
             if len(available_indices) == 0:
                 available_indices = np.arange(total_pixels)
         else:
             available_indices = np.arange(total_pixels)
 
-        # 3. Strategy Selection with Capacity Control
-
-        # Calculate target number of pixels based on capacity_ratio
-        target_pixels = int(len(available_indices) * capacity_ratio)
-        target_pixels = max(1, target_pixels)  # At least 1 pixel
-
+        # 3. Strategy Selection
         if strategy == 'random':
             # Randomly select target_pixels from available
             chosen_indices = np.random.choice(
                 available_indices,
-                min(target_pixels, len(available_indices)),
+                target_pixels,
                 replace=False
             )
 
         elif strategy == 'skip':
-            # Use skip pattern, but limit to target_pixels
+            # FIX 3: Maintain spatial regularity of skip pattern (no random sampling)
             skipped = available_indices[::step]
-            if len(skipped) > target_pixels:
-                # Randomly sample from skipped to reach target
-                chosen_indices = np.random.choice(skipped, target_pixels, replace=False)
-            else:
+
+            if len(skipped) < target_pixels:
+                # Not enough pixels with this step size
+                # Uncomment for debugging:
+                # print(f"[LSB WARNING] Skip step {step} too large. "
+                #       f"Only {len(skipped)} pixels available, need {target_pixels}. "
+                #       f"Using all skipped pixels.")
                 chosen_indices = skipped
+            else:
+                # Take first target_pixels from skip pattern (maintains regularity)
+                chosen_indices = skipped[:target_pixels]
 
         elif strategy == 'sequential':
             # Take first N available pixels
@@ -129,6 +139,11 @@ class LSBGenerator(BaseGenerator):
         # 6. Finalize
         stego_array = flat_img.reshape(img_array.shape)
         psnr = self._calculate_psnr(img_array, stego_array)
+
+        # FIX 4: Diagnostic output (uncomment to verify capacity is correct)
+        # actual_mod_rate = len(chosen_indices) / total_pixels
+        # print(f"[LSB] Target: {capacity_ratio:.2%} | Actual: {actual_mod_rate:.2%} | "
+        #       f"Edge: {edge_threshold} | Strategy: {strategy} | Step: {step}")
 
         return stego_array, psnr
 

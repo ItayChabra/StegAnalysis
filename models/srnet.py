@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-
 class SRNet(nn.Module):
     def __init__(self, num_classes=2):
         super(SRNet, self).__init__()
