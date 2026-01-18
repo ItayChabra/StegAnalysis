@@ -1,48 +1,52 @@
 import os
 import sys
-from training.train_hybrid import run_training
 
-# --- FIX 1: Ensure Python can find the file if it's in the same folder ---
+# Ensure Python can find the training module
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-def check_data_setup():
+from training.train_hybrid import run_training
+
+
+def setup_environment():
     """
-    Verifies that the dataset is correctly placed in 'data/raw'.
+    Creates the required folder structure if it doesn't exist.
+    We don't count files here; we let train_hybrid.py handle data validation.
     """
-    data_path = os.path.join("data", "raw")
+    base_path = os.path.join("data", "raw")
+    folders = ["flickr30k", "BossBase and BOWS2"]
 
-    # 1. Check if folder exists
-    if not os.path.exists(data_path):
-        os.makedirs(data_path)
-        print(f"[WARN] Created missing folder: {data_path}")
-        print("   -> Please move your Flickr/Dataset images into this folder.")
-        return False
+    created = False
+    for folder in folders:
+        path = os.path.join(base_path, folder)
+        if not os.path.exists(path):
+            os.makedirs(path)
+            print(f"[SETUP] Created missing folder: {path}")
+            created = True
 
-    # 2. Count images
-    valid_exts = ('.jpg', '.jpeg', '.png')
-    files = [f for f in os.listdir(data_path) if f.lower().endswith(valid_exts)]
-
-    if len(files) < 20:
-        print(f"[ERROR] Found only {len(files)} images in '{data_path}'.")
-        print("   To see real learning, you need at least 50-100 images.")
-        return False
-
-    print(f"[OK] Found {len(files)} images ready for training.")
-    return True
+    if created:
+        print("[INFO] Folder structure created.")
+        print("       Please add your JPGs to 'data/raw/flickr30k'")
+        print("       Please add your PGMs/PNGs to 'data/raw/bossbase'")
 
 
 if __name__ == "__main__":
     print("==========================================")
     print("       Steganography Defense System       ")
-    print("         Evolutionary Pilot Run           ")
+    print("         Hybrid Evolutionary Run          ")
     print("==========================================")
 
-    if check_data_setup():
-        try:
-            run_training()
+    # 1. Just create the folders if missing
+    setup_environment()
 
-        except KeyboardInterrupt:
-            print("\n[STOP] Training stopped by user.")
-        except Exception as e:
-            print(f"\n[CRITICAL] Error during training: {e}")
-            raise e
+    # 2. Run Training (This handles the file counting/validation)
+    try:
+        run_training()
+
+    except ValueError as e:
+        # Catch the specific "Not enough data" error from train_hybrid
+        print(f"\n[ERROR] Data Setup Issue: {e}")
+    except KeyboardInterrupt:
+        print("\n[STOP] Training stopped by user.")
+    except Exception as e:
+        print(f"\n[CRITICAL] Error during training: {e}")
+        raise e
