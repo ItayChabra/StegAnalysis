@@ -57,7 +57,7 @@ class LSBGenerator(BaseGenerator):
         flat_img = img_array.flatten()
         total_pixels = flat_img.size
 
-        # FIX 1: Calculate target based on TOTAL pixels (not available pixels)
+        # Calculate target based on TOTAL pixels (not available pixels)
         target_pixels = int(total_pixels * capacity_ratio)
         target_pixels = max(1, target_pixels)
 
@@ -139,11 +139,6 @@ class LSBGenerator(BaseGenerator):
         # 6. Finalize
         stego_array = flat_img.reshape(img_array.shape)
         psnr = self._calculate_psnr(img_array, stego_array)
-
-        # FIX 4: Diagnostic output (uncomment to verify capacity is correct)
-        # actual_mod_rate = len(chosen_indices) / total_pixels
-        # print(f"[LSB] Target: {capacity_ratio:.2%} | Actual: {actual_mod_rate:.2%} | "
-        #       f"Edge: {edge_threshold} | Strategy: {strategy} | Step: {step}")
 
         return stego_array, psnr
 
