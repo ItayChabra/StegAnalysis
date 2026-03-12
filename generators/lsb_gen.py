@@ -1,7 +1,6 @@
 from generators.base_generator import BaseGenerator
 import numpy as np
 from PIL import Image
-import os
 
 
 class LSBGenerator(BaseGenerator):
@@ -57,59 +56,58 @@ class LSBGenerator(BaseGenerator):
         flat_img = img_array.flatten()
         total_pixels = flat_img.size
 
-        # Calculate target based on TOTAL pixels (not available pixels)
         target_pixels = int(total_pixels * capacity_ratio)
         target_pixels = max(1, target_pixels)
 
-        # 2. Determine Available Pixels with Fallback
-        if edge_threshold > 0:
-            available_indices = self._get_complex_areas(img_array, edge_threshold)
+        # 2. Strategy Selection
+        # FIX: 'edge' is now a standalone first-class strategy rather than a
+        # pre-filter that silently narrowed the pixel pool for every other strategy.
+        # Previously, any edge_threshold > 0 would filter available_indices before
+        # the strategy block ran, so 'random' and 'skip' were both secretly operating
+        # on edge pixels only — making edge_threshold an invisible override, not an
+        # independent strategy. Each branch below is fully self-contained.
 
-            # FIX 2: If not enough edge pixels, expand to all pixels (guaranteed capacity)
-            if len(available_indices) < target_pixels:
-                # Uncomment for debugging:
-                # print(f"[LSB WARNING] Edge threshold {edge_threshold} too high. "
-                #       f"Only {len(available_indices)} edge pixels, need {target_pixels}. "
-                #       f"Expanding to all pixels.")
-                available_indices = np.arange(total_pixels)
-
-            if len(available_indices) == 0:
-                available_indices = np.arange(total_pixels)
-        else:
-            available_indices = np.arange(total_pixels)
-
-        # 3. Strategy Selection
-        if strategy == 'random':
-            # Randomly select target_pixels from available
-            chosen_indices = np.random.choice(
-                available_indices,
-                target_pixels,
-                replace=False
+        if strategy == 'edge':
+            # Embed only in high-gradient (textured/edge) regions.
+            # Falls back to the full image if the threshold is too tight.
+            candidate_indices = (
+                self._get_complex_areas(img_array, edge_threshold)
+                if edge_threshold > 0
+                else np.arange(total_pixels)
             )
+            if len(candidate_indices) < target_pixels:
+                # Not enough edge pixels — widen to full image so capacity is honoured.
+                candidate_indices = np.arange(total_pixels)
+
+            chosen_indices = np.random.choice(candidate_indices, target_pixels, replace=False)
+
+        elif strategy == 'random':
+            # Uniform random selection across the entire image (no spatial bias).
+            chosen_indices = np.random.choice(total_pixels, target_pixels, replace=False)
 
         elif strategy == 'skip':
-            # FIX 3: Maintain spatial regularity of skip pattern (no random sampling)
-            skipped = available_indices[::step]
+            # Spatially regular sub-sampling with a fixed step size.
+            skipped = np.arange(0, total_pixels, step)
 
             if len(skipped) < target_pixels:
-                # Not enough pixels with this step size
-                # Uncomment for debugging:
-                # print(f"[LSB WARNING] Skip step {step} too large. "
-                #       f"Only {len(skipped)} pixels available, need {target_pixels}. "
-                #       f"Using all skipped pixels.")
+                # Step too large — use every skipped pixel, accept lower capacity.
                 chosen_indices = skipped
             else:
-                # Take first target_pixels from skip pattern (maintains regularity)
                 chosen_indices = skipped[:target_pixels]
 
         elif strategy == 'sequential':
-            # Take first N available pixels
-            chosen_indices = available_indices[:target_pixels]
+            # Simplest baseline: first N pixels in raster order.
+            chosen_indices = np.arange(min(target_pixels, total_pixels))
 
-        else:  # Fallback
-            chosen_indices = available_indices[:target_pixels]
+        else:
+            # Fallback for unknown strategies.
+            chosen_indices = np.random.choice(total_pixels, target_pixels, replace=False)
 
-        # 4. Generate or Prepare Bits
+        # 3. Generate or Prepare Bits
+        # FIX: derive exact_bits_needed from the *actual* len(chosen_indices), not
+        # the pre-computed target_pixels. The 'skip' strategy can yield fewer pixels
+        # than target_pixels when the step is large; using target_pixels here caused
+        # a silent reshape crash in step 4.
         exact_bits_needed = len(chosen_indices) * bit_depth
 
         if message:
@@ -117,14 +115,12 @@ class LSBGenerator(BaseGenerator):
             if len(bits) > exact_bits_needed:
                 bits = bits[:exact_bits_needed]
             elif len(bits) < exact_bits_needed:
-                # Pad with random bits
                 padding = np.random.randint(0, 2, exact_bits_needed - len(bits), dtype=np.uint8)
                 bits = np.concatenate([bits, padding])
         else:
-            # Random payload
             bits = np.random.randint(0, 2, exact_bits_needed, dtype=np.uint8)
 
-        # 5. Vectorized Embedding
+        # 4. Vectorized Embedding
         bits_reshaped = bits.reshape((len(chosen_indices), bit_depth))
         pixels = flat_img[chosen_indices].copy()
 
@@ -136,13 +132,17 @@ class LSBGenerator(BaseGenerator):
 
         flat_img[chosen_indices] = pixels
 
-        # 6. Finalize
+        # 5. Finalize
         stego_array = flat_img.reshape(img_array.shape)
         psnr = self._calculate_psnr(img_array, stego_array)
+
+        if output_path:
+            Image.fromarray(stego_array).save(output_path)
 
         return stego_array, psnr
 
     def _calculate_psnr(self, original, stego):
         mse = np.mean((original.astype(float) - stego.astype(float)) ** 2)
-        if mse == 0: return float('inf')
+        if mse == 0:
+            return float('inf')
         return 20 * np.log10(255.0 / np.sqrt(mse))

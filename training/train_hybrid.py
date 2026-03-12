@@ -26,29 +26,63 @@ DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 cudnn.benchmark = True
 INITIAL_LR = 0.0001
-MAX_LR = 0.001  # Restored from 0.0003
-MIN_CAPACITY = 0.20  # Prevent generators from going too subtle
+MAX_LR = 0.001
+MIN_CAPACITY = 0.20
 MAX_CAPACITY = 0.75
+
+# All four strategies now that 'edge' is a first-class citizen in lsb_gen.py.
+ALL_STRATEGIES = ['random', 'sequential', 'skip', 'edge']
+
+# Niche preservation: each strategy is guaranteed at least this many survivors
+# per generation, preventing the population from collapsing to a single strategy.
+MIN_NICHE_SIZE = 2
+
+# Fitness penalty applied when a genome's capacity is at or near the minimum.
+# Low-capacity genomes are trivially hard to detect and degrade training diversity.
+CAPACITY_PENALTY_THRESHOLD = MIN_CAPACITY + 0.10   # penalise below 0.30
+CAPACITY_PENALTY_WEIGHT = 0.15                      # subtract up to 15 pp from fitness
 
 
 class EvolutionaryManager:
     def __init__(self):
+        # Seed the population so every strategy is represented from the start.
         self.population = []
-        for i in range(POPULATION_SIZE):
+        # At least one genome per strategy to bootstrap niche coverage.
+        for strategy in ALL_STRATEGIES:
+            self.population.append(self._generate_random_genome(f"Seed_{strategy}", strategy))
+        # Fill the rest randomly.
+        for i in range(POPULATION_SIZE - len(ALL_STRATEGIES)):
             self.population.append(self._generate_random_genome(f"Gen_{i}"))
+
         self.stats = {g['name']: {'fooled': 0, 'attempts': 0} for g in self.population}
         self.generation = 0
 
-    def _generate_random_genome(self, name):
+    def _generate_random_genome(self, name, strategy=None):
         genome = {'name': name, 'gen_type': 'lsb'}
         genome.update({
-            'strategy': random.choice(['random', 'sequential', 'skip']),
+            'strategy': strategy if strategy else random.choice(ALL_STRATEGIES),
             'step': random.randint(1, 15),
             'bit_depth': 1,
             'edge_threshold': random.randint(0, 100),
-            'capacity_ratio': random.uniform(MIN_CAPACITY, MAX_CAPACITY),  # Constrained
+            'capacity_ratio': random.uniform(MIN_CAPACITY, MAX_CAPACITY),
         })
         return genome
+
+    def _penalised_fitness(self, genome, raw_fool_rate):
+        """
+        Apply a capacity penalty to raw fooling rate.
+
+        Genomes that survive by using very low capacity (hard to detect because
+        barely anything is embedded) are penalised so they don't crowd out
+        genomes that are genuinely evasive at higher payloads.
+        """
+        capacity = genome.get('capacity_ratio', 0.5)
+        if capacity < CAPACITY_PENALTY_THRESHOLD:
+            shortfall = (CAPACITY_PENALTY_THRESHOLD - capacity) / CAPACITY_PENALTY_THRESHOLD
+            penalty = shortfall * CAPACITY_PENALTY_WEIGHT
+        else:
+            penalty = 0.0
+        return max(0.0, raw_fool_rate - penalty)
 
     def mutate(self, genome):
         new_genome = copy.deepcopy(genome)
@@ -63,7 +97,7 @@ class EvolutionaryManager:
                 change = random.randint(-20, 20)
                 new_genome['edge_threshold'] = max(0, min(100, new_genome['edge_threshold'] + change))
             elif mutation == 'strategy':
-                new_genome['strategy'] = random.choice(['random', 'sequential', 'skip'])
+                new_genome['strategy'] = random.choice(ALL_STRATEGIES)
             elif mutation == 'capacity':
                 change = random.uniform(-0.15, 0.15)
                 new_genome['capacity_ratio'] = max(MIN_CAPACITY,
@@ -83,44 +117,107 @@ class EvolutionaryManager:
         for name, fooled in zip(names, is_fooled_list):
             if name in self.stats:
                 self.stats[name]['attempts'] += 1
-                if fooled: self.stats[name]['fooled'] += 1
+                if fooled:
+                    self.stats[name]['fooled'] += 1
 
     def evolve(self):
         self.generation += 1
-        final_scores = {}
-        for name, data in self.stats.items():
-            if data['attempts'] > 0:
-                final_scores[name] = data['fooled'] / data['attempts']
-            else:
-                final_scores[name] = 0.0
-        sorted_pop = sorted(self.population, key=lambda g: final_scores.get(g['name'], 0), reverse=True)
 
-        print(f"\n[EVOLUTION] Generation {self.generation} - Top 3:")
+        # --- Compute penalised fitness scores ---
+        final_scores = {}
+        for genome in self.population:
+            name = genome['name']
+            data = self.stats[name]
+            if data['attempts'] > 0:
+                raw = data['fooled'] / data['attempts']
+            else:
+                raw = 0.0
+            final_scores[name] = self._penalised_fitness(genome, raw)
+
+        sorted_pop = sorted(
+            self.population,
+            key=lambda g: final_scores.get(g['name'], 0.0),
+            reverse=True
+        )
+
+        print(f"\n[EVOLUTION] Generation {self.generation} - Top 3 (penalised fitness):")
         for i in range(min(3, len(sorted_pop))):
             g = sorted_pop[i]
-            score = final_scores.get(g['name'], 0) * 100
+            score = final_scores.get(g['name'], 0.0) * 100
+            raw_data = self.stats[g['name']]
+            raw_rate = (raw_data['fooled'] / raw_data['attempts'] * 100) if raw_data['attempts'] > 0 else 0.0
             print(
-                f"  #{i + 1}: {g['name']} - {score:.2f}% | Strat: {g['strategy']} | Cap: {g['capacity_ratio']:.2f} | Edge: {g['edge_threshold']}")
+                f"  #{i + 1}: {g['name']} - {score:.2f}% (raw {raw_rate:.1f}%) | "
+                f"Strat: {g['strategy']} | Cap: {g['capacity_ratio']:.2f} | "
+                f"Edge: {g['edge_threshold']}"
+            )
 
-        new_pop = sorted_pop[:3]
-        if len(sorted_pop) >= 2: new_pop.append(self.crossover(sorted_pop[0], sorted_pop[1]))
-        if len(sorted_pop) >= 3: new_pop.append(self.crossover(sorted_pop[0], sorted_pop[2]))
-        for i in range(2): new_pop.append(self._generate_random_genome(f"Gen_Rnd_{self.generation}_{i}"))
+        # --- Niche Preservation ---
+        # Guarantee MIN_NICHE_SIZE survivors per strategy so no strategy can be
+        # entirely displaced by a fitter neighbour (avoids monoculture).
+        niche_survivors = []
+        for strategy in ALL_STRATEGIES:
+            strategy_members = [g for g in sorted_pop if g.get('strategy') == strategy]
+            # Take the best-scoring genome(s) from each niche.
+            for g in strategy_members[:MIN_NICHE_SIZE]:
+                if g not in niche_survivors:
+                    niche_survivors.append(g)
+
+        # Elite survivors: top-3 overall (may overlap with niche survivors).
+        elite = []
+        for g in sorted_pop:
+            if g not in elite:
+                elite.append(g)
+            if len(elite) == 3:
+                break
+
+        # Merge elite + niche survivors (deduplicated).
+        new_pop = list({id(g): g for g in elite + niche_survivors}.values())
+
+        # Fill remaining slots.
+        if len(sorted_pop) >= 2:
+            new_pop.append(self.crossover(sorted_pop[0], sorted_pop[1]))
+        if len(sorted_pop) >= 3:
+            new_pop.append(self.crossover(sorted_pop[0], sorted_pop[2]))
+
+        # Two fresh random genomes for exploration (one per underrepresented strategy).
+        strategy_counts = {s: sum(1 for g in new_pop if g.get('strategy') == s) for s in ALL_STRATEGIES}
+        underrepresented = sorted(strategy_counts, key=strategy_counts.get)
+        for i, strategy in enumerate(underrepresented[:2]):
+            new_pop.append(self._generate_random_genome(f"Explore_{strategy}_{self.generation}", strategy))
+
+        # Fill remainder with mutations, biasing toward fit parents.
         while len(new_pop) < POPULATION_SIZE:
             parent_idx = min(random.randint(0, 2), len(sorted_pop) - 1)
             new_pop.append(self.mutate(sorted_pop[parent_idx]))
-        self.population = new_pop
+
+        self.population = new_pop[:POPULATION_SIZE]
         self.stats = {g['name']: {'fooled': 0, 'attempts': 0} for g in self.population}
         return sorted_pop[0]
 
     def get_random_genome(self):
+        """
+        Sample a genome for use in the current training step.
+
+        FIX: genomes with zero attempts previously got weight 0.1 — the same as
+        a genome with 0% fool rate, making genuinely poor performers equally likely
+        to be sampled as unexplored ones.  New genomes now get a small neutral
+        weight (0.15) so they're explored, while proven poor performers stay low.
+        """
         if self.generation == 0 or random.random() < 0.3:
             return random.choice(self.population)
+
         weights = []
         for g in self.population:
             data = self.stats[g['name']]
-            score = (data['fooled'] / data['attempts']) if data['attempts'] > 0 else 0.1
-            weights.append(score + 0.05)
+            if data['attempts'] == 0:
+                # Not yet evaluated — give a neutral exploration bonus.
+                weights.append(0.15)
+            else:
+                raw = data['fooled'] / data['attempts']
+                score = self._penalised_fitness(g, raw)
+                weights.append(score + 0.05)
+
         total = sum(weights)
         weights = [w / total for w in weights]
         return random.choices(self.population, weights=weights, k=1)[0]
@@ -168,7 +265,7 @@ def adjust_learning_rate(optimizer, epoch):
 
 
 def run_training():
-    print(f"🚀 Starting Hybrid 50/50 Training on {DEVICE}")
+    print(f"Starting Hybrid 50/50 Training on {DEVICE}")
     lossy_files, lossless_files = load_balanced_dataset('data/raw')
 
     discriminator = SRNet().to(DEVICE)
@@ -186,10 +283,9 @@ def run_training():
     for epoch in range(EPOCHS):
         current_lr = adjust_learning_rate(optimizer, epoch)
 
-        # Calculate curriculum parameters for this epoch
-        if epoch < 10:  # Shortened from 12
-            min_capacity = max(MIN_CAPACITY, 1.0 - (epoch * 0.08))  # Respects MIN_CAPACITY floor
-            max_edge_threshold = min(70, epoch * 7)  # 0 → 70 over 10 epochs
+        if epoch < 10:
+            min_capacity = max(MIN_CAPACITY, 1.0 - (epoch * 0.08))
+            max_edge_threshold = min(70, epoch * 7)
             curriculum_active = True
         else:
             min_capacity = MIN_CAPACITY
@@ -199,12 +295,12 @@ def run_training():
         print(f"\n{'=' * 60}")
         print(f"Epoch {epoch + 1}/{EPOCHS} | LR: {current_lr:.6f}")
         if curriculum_active:
-            print(f"📚 Curriculum: Cap [{min_capacity:.2f}-1.0] | Edge [0-{max_edge_threshold}]")
+            print(f"Curriculum: Cap [{min_capacity:.2f}-1.0] | Edge [0-{max_edge_threshold}]")
         else:
-            if epoch == 10:  # Changed from 12
-                print(f"🧬 EVOLUTION ACTIVATED - Full competitive training begins!")
+            if epoch == 10:
+                print(f"EVOLUTION ACTIVATED - Full competitive training begins!")
             else:
-                print(f"🧬 Evolution Active")
+                print(f"Evolution Active")
         print('=' * 60)
 
         random.shuffle(lossy_files)
@@ -233,7 +329,8 @@ def run_training():
                 try:
                     cover_img = Image.open(path).convert('L')
                     w, h = cover_img.size
-                    if w < 256 or h < 256: continue
+                    if w < 256 or h < 256:
+                        continue
 
                     i_crop, j_crop, h_crop, w_crop = transforms.RandomCrop.get_params(
                         cover_img, output_size=(256, 256))
@@ -242,21 +339,15 @@ def run_training():
 
                     genome_with_capacity = genome.copy()
 
-                    # --- GRADUAL CURRICULUM LEARNING ---
                     if curriculum_active:
-                        # Override genome parameters with curriculum constraints
                         genome_with_capacity['capacity_ratio'] = random.uniform(min_capacity, 1.0)
                         genome_with_capacity['edge_threshold'] = random.randint(0, max_edge_threshold)
-                        # Early epochs: prefer random strategy for better coverage
                         if epoch < 5:
                             genome_with_capacity['strategy'] = 'random'
 
-                    # Message strategy
                     if epoch < 5:
-                        # Early: Always random bits for max entropy
                         genome_with_capacity['message'] = None
                     else:
-                        # Later: Mix text and random
                         if random.random() < 0.5:
                             genome_with_capacity['message'] = generate_long_text_message(length=5000)
                         else:
@@ -265,12 +356,11 @@ def run_training():
                     if 'capacity_ratio' not in genome_with_capacity:
                         genome_with_capacity['capacity_ratio'] = 0.5
 
-                    # Generate stego
                     stego_arr, _ = unified_gen.generate_stego(temp_cover_path, None, genome_with_capacity)
-                    if stego_arr is None: continue
+                    if stego_arr is None:
+                        continue
                     stego_img = Image.fromarray(stego_arr)
 
-                    # Add to batch
                     inputs.append(to_tensor(cover_crop))
                     labels.append(0)
                     batch_genome_names.append(None)
@@ -285,15 +375,15 @@ def run_training():
                     if os.path.exists(temp_cover_path):
                         os.remove(temp_cover_path)
 
-            if not inputs: continue
+            if not inputs:
+                continue
 
             inputs_t = torch.stack(inputs).to(DEVICE)
             labels_t = torch.tensor(labels).to(DEVICE)
 
-            # --- DIAGNOSTIC CHECK (First batch of first epoch) ---
             if epoch == 0 and step == 0:
                 print("\n" + "=" * 60)
-                print("🔍 DIAGNOSTIC CHECK")
+                print("DIAGNOSTIC CHECK")
                 print("=" * 60)
                 covers = inputs_t[0::2].cpu().numpy()
                 stegos = inputs_t[1::2].cpu().numpy()
@@ -306,13 +396,11 @@ def run_training():
                 print(f"  Batch: {labels.count(0)} covers, {labels.count(1)} stegos")
                 print("=" * 60 + "\n")
 
-            # Shuffle batch
             perm = torch.randperm(inputs_t.size(0))
             inputs_shuffled = inputs_t[perm]
             labels_shuffled = labels_t[perm]
             shuffled_genome_names = [batch_genome_names[idx] for idx in perm.tolist()]
 
-            # Training step
             optimizer.zero_grad()
             with torch.amp.autocast('cuda'):
                 outputs = discriminator(inputs_shuffled)
@@ -324,7 +412,6 @@ def run_training():
 
             _, preds = torch.max(outputs, 1)
 
-            # Update evolution stats (only when curriculum is inactive)
             if not curriculum_active:
                 relevant_names = []
                 fooled_results = []
@@ -343,22 +430,23 @@ def run_training():
                 acc_current = 100 * correct_total / total_samples
                 print(f"\rStep {step}/{steps_per_epoch} | Loss: {loss.item():.4f} | Acc: {acc_current:.1f}%", end="")
 
-        # End of Epoch Stats
         if total_samples > 0:
             avg_loss = total_loss / steps_per_epoch
             acc_total = 100 * correct_total / total_samples
 
             if curriculum_active:
-                # During curriculum, evolution is paused
                 print(
-                    f"\n[EPOCH SUMMARY] Loss: {avg_loss:.4f} | Acc: {acc_total:.2f}% | 📚 Curriculum Active - Evolution Paused")
-                avg_gen_score = 0.0  # Not tracking during curriculum
+                    f"\n[EPOCH SUMMARY] Loss: {avg_loss:.4f} | Acc: {acc_total:.2f}% | "
+                    f"Curriculum Active - Evolution Paused"
+                )
+                avg_gen_score = 0.0
             else:
-                # Normal evolution tracking
                 all_rates = [d['fooled'] / d['attempts'] for d in evo_manager.stats.values() if d['attempts'] > 0]
                 avg_gen_score = (sum(all_rates) / len(all_rates)) if all_rates else 0.0
                 print(
-                    f"\n[EPOCH SUMMARY] Loss: {avg_loss:.4f} | Acc: {acc_total:.2f}% | Gen Fool: {avg_gen_score * 100:.2f}%")
+                    f"\n[EPOCH SUMMARY] Loss: {avg_loss:.4f} | Acc: {acc_total:.2f}% | "
+                    f"Gen Fool: {avg_gen_score * 100:.2f}%"
+                )
 
             training_history['epochs'].append(epoch + 1)
             training_history['loss'].append(avg_loss)
@@ -366,14 +454,12 @@ def run_training():
             training_history['gen_success'].append(avg_gen_score * 100)
             training_history['learning_rate'].append(current_lr)
 
-        # Only evolve when curriculum is inactive
         if not curriculum_active:
             best_genome = evo_manager.evolve()
         else:
-            # During curriculum, just reset stats without evolution
             evo_manager.generation += 1
             evo_manager.stats = {g['name']: {'fooled': 0, 'attempts': 0} for g in evo_manager.population}
-            best_genome = evo_manager.population[0]  # Dummy for checkpoint
+            best_genome = evo_manager.population[0]
 
         if (epoch + 1) % 5 == 0:
             save_checkpoint(epoch + 1, discriminator, optimizer, best_genome, f"srnet_epoch_{epoch + 1}.pth")
