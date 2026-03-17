@@ -22,18 +22,48 @@ class LSBGenerator(BaseGenerator):
         bits = np.unpackbits(arr)
         return bits
 
-    def run(self, cover_path, output_path, **params):
+    def _load_image_array(self, cover_input):
+        """
+        Accepts a file path (str), a PIL.Image, or a numpy ndarray.
+        Always returns a uint8 numpy array in grayscale.
+        Raises ValueError on unsupported types.
+        """
+        if isinstance(cover_input, np.ndarray):
+            # Already an array — ensure correct dtype and 2-D (grayscale).
+            arr = cover_input.astype(np.uint8)
+            if arr.ndim == 3:
+                # Convert RGB/RGBA to grayscale by taking the first channel,
+                # matching the convert('L') behaviour used for file paths.
+                arr = arr[:, :, 0]
+            return arr
+
+        if isinstance(cover_input, Image.Image):
+            img = cover_input.convert('L') if cover_input.mode != 'L' else cover_input
+            return np.array(img, dtype=np.uint8)
+
+        if isinstance(cover_input, str):
+            img = Image.open(cover_input).convert('L')
+            return np.array(img, dtype=np.uint8)
+
+        raise ValueError(
+            f"cover_input must be a file path (str), PIL.Image, or np.ndarray. "
+            f"Got: {type(cover_input)}"
+        )
+
+    def run(self, cover_input, output_path, **params):
         """
         Implementation of the BaseGenerator interface.
+
+        cover_input: str (file path), PIL.Image, or np.ndarray.
         """
-        strategy = params.get('strategy', 'random')
-        step = params.get('step', 1)
-        bit_depth = params.get('bit_depth', 1)
+        strategy       = params.get('strategy', 'random')
+        step           = params.get('step', 1)
+        bit_depth      = params.get('bit_depth', 1)
         edge_threshold = params.get('edge_threshold', 0)
-        message = params.get('message', None)
+        message        = params.get('message', None)
         capacity_ratio = params.get('capacity_ratio', 0.5)
 
-        return self.embed(cover_path, output_path,
+        return self.embed(cover_input, output_path,
                           message=message,
                           strategy=strategy,
                           step=step,
@@ -41,73 +71,54 @@ class LSBGenerator(BaseGenerator):
                           edge_threshold=edge_threshold,
                           capacity_ratio=capacity_ratio)
 
-    def embed(self, cover_path, output_path, message=None,
+    def embed(self, cover_input, output_path, message=None,
               strategy='random', step=1,
               bit_depth=1, edge_threshold=0,
               capacity_ratio=0.5):
-
-        # 1. Load
+        """
+        cover_input: str (file path), PIL.Image, or np.ndarray.
+                     Accepts all three so callers never need to write a temp
+                     file just to hand an image back to this method.
+        """
+        # 1. Load — accept path, PIL.Image, or ndarray.
         try:
-            img = Image.open(cover_path).convert('L')
+            img_array = self._load_image_array(cover_input)
         except Exception:
             return None, 0
 
-        img_array = np.array(img, dtype=np.uint8)
-        flat_img = img_array.flatten()
+        flat_img     = img_array.flatten()
         total_pixels = flat_img.size
 
-        target_pixels = int(total_pixels * capacity_ratio)
-        target_pixels = max(1, target_pixels)
+        target_pixels = max(1, int(total_pixels * capacity_ratio))
 
-        # 2. Strategy Selection
-        # FIX: 'edge' is now a standalone first-class strategy rather than a
-        # pre-filter that silently narrowed the pixel pool for every other strategy.
-        # Previously, any edge_threshold > 0 would filter available_indices before
-        # the strategy block ran, so 'random' and 'skip' were both secretly operating
-        # on edge pixels only — making edge_threshold an invisible override, not an
-        # independent strategy. Each branch below is fully self-contained.
-
+        # 2. Strategy Selection — each branch is fully self-contained.
         if strategy == 'edge':
-            # Embed only in high-gradient (textured/edge) regions.
-            # Falls back to the full image if the threshold is too tight.
             candidate_indices = (
                 self._get_complex_areas(img_array, edge_threshold)
                 if edge_threshold > 0
                 else np.arange(total_pixels)
             )
             if len(candidate_indices) < target_pixels:
-                # Not enough edge pixels — widen to full image so capacity is honoured.
                 candidate_indices = np.arange(total_pixels)
-
             chosen_indices = np.random.choice(candidate_indices, target_pixels, replace=False)
 
         elif strategy == 'random':
-            # Uniform random selection across the entire image (no spatial bias).
             chosen_indices = np.random.choice(total_pixels, target_pixels, replace=False)
 
         elif strategy == 'skip':
-            # Spatially regular sub-sampling with a fixed step size.
             skipped = np.arange(0, total_pixels, step)
-
             if len(skipped) < target_pixels:
-                # Step too large — use every skipped pixel, accept lower capacity.
                 chosen_indices = skipped
             else:
                 chosen_indices = skipped[:target_pixels]
 
         elif strategy == 'sequential':
-            # Simplest baseline: first N pixels in raster order.
             chosen_indices = np.arange(min(target_pixels, total_pixels))
 
         else:
-            # Fallback for unknown strategies.
             chosen_indices = np.random.choice(total_pixels, target_pixels, replace=False)
 
         # 3. Generate or Prepare Bits
-        # FIX: derive exact_bits_needed from the *actual* len(chosen_indices), not
-        # the pre-computed target_pixels. The 'skip' strategy can yield fewer pixels
-        # than target_pixels when the step is large; using target_pixels here caused
-        # a silent reshape crash in step 4.
         exact_bits_needed = len(chosen_indices) * bit_depth
 
         if message:
@@ -125,16 +136,16 @@ class LSBGenerator(BaseGenerator):
         pixels = flat_img[chosen_indices].copy()
 
         for b in range(bit_depth):
-            mask = 255 - (1 << b)
+            mask           = 255 - (1 << b)
             secret_bit_col = bits_reshaped[:, b]
-            pixels &= mask
-            pixels |= (secret_bit_col << b)
+            pixels        &= mask
+            pixels        |= (secret_bit_col << b)
 
         flat_img[chosen_indices] = pixels
 
         # 5. Finalize
         stego_array = flat_img.reshape(img_array.shape)
-        psnr = self._calculate_psnr(img_array, stego_array)
+        psnr        = self._calculate_psnr(img_array, stego_array)
 
         if output_path:
             Image.fromarray(stego_array).save(output_path)

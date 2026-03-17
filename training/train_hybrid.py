@@ -16,12 +16,13 @@ import json
 import uuid
 import string
 import numpy as np
+import concurrent.futures  # Added for parallel CPU execution
 
 # --- SETTINGS ---
 BATCH_SIZE = 64
 EPOCHS = 30
 POPULATION_SIZE = 20
-NUM_WORKERS = min(8, multiprocessing.cpu_count())
+NUM_WORKERS = max(1, multiprocessing.cpu_count() - 2)
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 cudnn.benchmark = True
@@ -30,27 +31,17 @@ MAX_LR = 0.001
 MIN_CAPACITY = 0.20
 MAX_CAPACITY = 0.75
 
-# All four strategies now that 'edge' is a first-class citizen in lsb_gen.py.
 ALL_STRATEGIES = ['random', 'sequential', 'skip', 'edge']
-
-# Niche preservation: each strategy is guaranteed at least this many survivors
-# per generation, preventing the population from collapsing to a single strategy.
 MIN_NICHE_SIZE = 2
-
-# Fitness penalty applied when a genome's capacity is at or near the minimum.
-# Low-capacity genomes are trivially hard to detect and degrade training diversity.
-CAPACITY_PENALTY_THRESHOLD = MIN_CAPACITY + 0.10   # penalise below 0.30
-CAPACITY_PENALTY_WEIGHT = 0.15                      # subtract up to 15 pp from fitness
+CAPACITY_PENALTY_THRESHOLD = MIN_CAPACITY + 0.10
+CAPACITY_PENALTY_WEIGHT = 0.15
 
 
 class EvolutionaryManager:
     def __init__(self):
-        # Seed the population so every strategy is represented from the start.
         self.population = []
-        # At least one genome per strategy to bootstrap niche coverage.
         for strategy in ALL_STRATEGIES:
             self.population.append(self._generate_random_genome(f"Seed_{strategy}", strategy))
-        # Fill the rest randomly.
         for i in range(POPULATION_SIZE - len(ALL_STRATEGIES)):
             self.population.append(self._generate_random_genome(f"Gen_{i}"))
 
@@ -69,13 +60,6 @@ class EvolutionaryManager:
         return genome
 
     def _penalised_fitness(self, genome, raw_fool_rate):
-        """
-        Apply a capacity penalty to raw fooling rate.
-
-        Genomes that survive by using very low capacity (hard to detect because
-        barely anything is embedded) are penalised so they don't crowd out
-        genomes that are genuinely evasive at higher payloads.
-        """
         capacity = genome.get('capacity_ratio', 0.5)
         if capacity < CAPACITY_PENALTY_THRESHOLD:
             shortfall = (CAPACITY_PENALTY_THRESHOLD - capacity) / CAPACITY_PENALTY_THRESHOLD
@@ -122,23 +106,14 @@ class EvolutionaryManager:
 
     def evolve(self):
         self.generation += 1
-
-        # --- Compute penalised fitness scores ---
         final_scores = {}
         for genome in self.population:
             name = genome['name']
             data = self.stats[name]
-            if data['attempts'] > 0:
-                raw = data['fooled'] / data['attempts']
-            else:
-                raw = 0.0
+            raw = data['fooled'] / data['attempts'] if data['attempts'] > 0 else 0.0
             final_scores[name] = self._penalised_fitness(genome, raw)
 
-        sorted_pop = sorted(
-            self.population,
-            key=lambda g: final_scores.get(g['name'], 0.0),
-            reverse=True
-        )
+        sorted_pop = sorted(self.population, key=lambda g: final_scores.get(g['name'], 0.0), reverse=True)
 
         print(f"\n[EVOLUTION] Generation {self.generation} - Top 3 (penalised fitness):")
         for i in range(min(3, len(sorted_pop))):
@@ -147,23 +122,15 @@ class EvolutionaryManager:
             raw_data = self.stats[g['name']]
             raw_rate = (raw_data['fooled'] / raw_data['attempts'] * 100) if raw_data['attempts'] > 0 else 0.0
             print(
-                f"  #{i + 1}: {g['name']} - {score:.2f}% (raw {raw_rate:.1f}%) | "
-                f"Strat: {g['strategy']} | Cap: {g['capacity_ratio']:.2f} | "
-                f"Edge: {g['edge_threshold']}"
-            )
+                f"  #{i + 1}: {g['name']} - {score:.2f}% (raw {raw_rate:.1f}%) | Strat: {g['strategy']} | Cap: {g['capacity_ratio']:.2f} | Edge: {g['edge_threshold']}")
 
-        # --- Niche Preservation ---
-        # Guarantee MIN_NICHE_SIZE survivors per strategy so no strategy can be
-        # entirely displaced by a fitter neighbour (avoids monoculture).
         niche_survivors = []
         for strategy in ALL_STRATEGIES:
             strategy_members = [g for g in sorted_pop if g.get('strategy') == strategy]
-            # Take the best-scoring genome(s) from each niche.
             for g in strategy_members[:MIN_NICHE_SIZE]:
                 if g not in niche_survivors:
                     niche_survivors.append(g)
 
-        # Elite survivors: top-3 overall (may overlap with niche survivors).
         elite = []
         for g in sorted_pop:
             if g not in elite:
@@ -171,22 +138,16 @@ class EvolutionaryManager:
             if len(elite) == 3:
                 break
 
-        # Merge elite + niche survivors (deduplicated).
         new_pop = list({id(g): g for g in elite + niche_survivors}.values())
 
-        # Fill remaining slots.
-        if len(sorted_pop) >= 2:
-            new_pop.append(self.crossover(sorted_pop[0], sorted_pop[1]))
-        if len(sorted_pop) >= 3:
-            new_pop.append(self.crossover(sorted_pop[0], sorted_pop[2]))
+        if len(sorted_pop) >= 2: new_pop.append(self.crossover(sorted_pop[0], sorted_pop[1]))
+        if len(sorted_pop) >= 3: new_pop.append(self.crossover(sorted_pop[0], sorted_pop[2]))
 
-        # Two fresh random genomes for exploration (one per underrepresented strategy).
         strategy_counts = {s: sum(1 for g in new_pop if g.get('strategy') == s) for s in ALL_STRATEGIES}
         underrepresented = sorted(strategy_counts, key=strategy_counts.get)
         for i, strategy in enumerate(underrepresented[:2]):
             new_pop.append(self._generate_random_genome(f"Explore_{strategy}_{self.generation}", strategy))
 
-        # Fill remainder with mutations, biasing toward fit parents.
         while len(new_pop) < POPULATION_SIZE:
             parent_idx = min(random.randint(0, 2), len(sorted_pop) - 1)
             new_pop.append(self.mutate(sorted_pop[parent_idx]))
@@ -196,14 +157,6 @@ class EvolutionaryManager:
         return sorted_pop[0]
 
     def get_random_genome(self):
-        """
-        Sample a genome for use in the current training step.
-
-        FIX: genomes with zero attempts previously got weight 0.1 — the same as
-        a genome with 0% fool rate, making genuinely poor performers equally likely
-        to be sampled as unexplored ones.  New genomes now get a small neutral
-        weight (0.15) so they're explored, while proven poor performers stay low.
-        """
         if self.generation == 0 or random.random() < 0.3:
             return random.choice(self.population)
 
@@ -211,7 +164,6 @@ class EvolutionaryManager:
         for g in self.population:
             data = self.stats[g['name']]
             if data['attempts'] == 0:
-                # Not yet evaluated — give a neutral exploration bonus.
                 weights.append(0.15)
             else:
                 raw = data['fooled'] / data['attempts']
@@ -269,6 +221,7 @@ def run_training():
     lossy_files, lossless_files = load_balanced_dataset('data/raw')
 
     discriminator = SRNet().to(DEVICE)
+    #discriminator = torch.compile(discriminator)
     optimizer = optim.Adam(discriminator.parameters(), lr=INITIAL_LR, weight_decay=1e-4)
     criterion = nn.CrossEntropyLoss()
     scaler = torch.amp.GradScaler('cuda')
@@ -317,25 +270,17 @@ def run_training():
             batch_files = batch_lossy + batch_lossless
             random.shuffle(batch_files)
 
-            inputs = []
-            labels = []
-            batch_genome_names = []
-
-            for path in batch_files:
+            # --- PARALLEL DATA GENERATION WORKER ---
+            def generate_pair(path):
                 genome = evo_manager.get_random_genome()
-                temp_id = str(uuid.uuid4())
-                temp_cover_path = f"temp_{temp_id}.png"
-
                 try:
                     cover_img = Image.open(path).convert('L')
                     w, h = cover_img.size
                     if w < 256 or h < 256:
-                        continue
+                        return None
 
-                    i_crop, j_crop, h_crop, w_crop = transforms.RandomCrop.get_params(
-                        cover_img, output_size=(256, 256))
+                    i_crop, j_crop, h_crop, w_crop = transforms.RandomCrop.get_params(cover_img, output_size=(256, 256))
                     cover_crop = TF.crop(cover_img, i_crop, j_crop, h_crop, w_crop)
-                    cover_crop.save(temp_cover_path)
 
                     genome_with_capacity = genome.copy()
 
@@ -348,38 +293,42 @@ def run_training():
                     if epoch < 5:
                         genome_with_capacity['message'] = None
                     else:
-                        if random.random() < 0.5:
-                            genome_with_capacity['message'] = generate_long_text_message(length=5000)
-                        else:
-                            genome_with_capacity['message'] = None
+                        genome_with_capacity['message'] = generate_long_text_message(
+                            length=5000) if random.random() < 0.5 else None
 
                     if 'capacity_ratio' not in genome_with_capacity:
                         genome_with_capacity['capacity_ratio'] = 0.5
 
-                    stego_arr, _ = unified_gen.generate_stego(temp_cover_path, None, genome_with_capacity)
+                    # Direct in-memory generation! No temp files needed.
+                    stego_arr, _ = unified_gen.generate_stego(cover_crop, None, genome_with_capacity)
                     if stego_arr is None:
-                        continue
-                    stego_img = Image.fromarray(stego_arr)
+                        return None
 
-                    inputs.append(to_tensor(cover_crop))
-                    labels.append(0)
-                    batch_genome_names.append(None)
-
-                    inputs.append(to_tensor(stego_img))
-                    labels.append(1)
-                    batch_genome_names.append(genome['name'])
+                    return (to_tensor(cover_crop), to_tensor(Image.fromarray(stego_arr)), genome['name'])
 
                 except Exception:
-                    continue
-                finally:
-                    if os.path.exists(temp_cover_path):
-                        os.remove(temp_cover_path)
+                    return None
+
+            # --- EXECUTE ACROSS 8 vCPUs ---
+            inputs = []
+            labels = []
+            batch_genome_names = []
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=NUM_WORKERS) as executor:
+                results = executor.map(generate_pair, batch_files)
+
+            for res in results:
+                if res:
+                    cover_t, stego_t, g_name = res
+                    inputs.extend([cover_t, stego_t])
+                    labels.extend([0, 1])
+                    batch_genome_names.extend([None, g_name])
 
             if not inputs:
                 continue
 
-            inputs_t = torch.stack(inputs).to(DEVICE)
-            labels_t = torch.tensor(labels).to(DEVICE)
+            inputs_t = torch.stack(inputs).to(DEVICE, non_blocking=True)
+            labels_t = torch.tensor(labels, dtype=torch.long).to(DEVICE, non_blocking=True)
 
             if epoch == 0 and step == 0:
                 print("\n" + "=" * 60)
@@ -436,17 +385,13 @@ def run_training():
 
             if curriculum_active:
                 print(
-                    f"\n[EPOCH SUMMARY] Loss: {avg_loss:.4f} | Acc: {acc_total:.2f}% | "
-                    f"Curriculum Active - Evolution Paused"
-                )
+                    f"\n[EPOCH SUMMARY] Loss: {avg_loss:.4f} | Acc: {acc_total:.2f}% | Curriculum Active - Evolution Paused")
                 avg_gen_score = 0.0
             else:
                 all_rates = [d['fooled'] / d['attempts'] for d in evo_manager.stats.values() if d['attempts'] > 0]
                 avg_gen_score = (sum(all_rates) / len(all_rates)) if all_rates else 0.0
                 print(
-                    f"\n[EPOCH SUMMARY] Loss: {avg_loss:.4f} | Acc: {acc_total:.2f}% | "
-                    f"Gen Fool: {avg_gen_score * 100:.2f}%"
-                )
+                    f"\n[EPOCH SUMMARY] Loss: {avg_loss:.4f} | Acc: {acc_total:.2f}% | Gen Fool: {avg_gen_score * 100:.2f}%")
 
             training_history['epochs'].append(epoch + 1)
             training_history['loss'].append(avg_loss)

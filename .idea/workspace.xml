@@ -5,11 +5,17 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="94558183-8a49-42f9-a799-19f5f2d0f95c" name="Changes" comment="Used a different dataset from kaggle with LSB embeddings with both grayscale and RGB.&#10;after current training, the model is able to identify 100% of the steganography in that dataset - success!">
-      <change beforePath="$PROJECT_DIR$/.idea/StegAnalysis.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/StegAnalysis.iml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/generators/lsb_gen.py" beforeDir="false" afterPath="$PROJECT_DIR$/generators/lsb_gen.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/generators/unified_generator.py" beforeDir="false" afterPath="$PROJECT_DIR$/generators/unified_generator.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/srnet_epoch_10.pth" beforeDir="false" afterPath="$PROJECT_DIR$/srnet_epoch_10.pth" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/srnet_epoch_15.pth" beforeDir="false" afterPath="$PROJECT_DIR$/srnet_epoch_15.pth" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/srnet_epoch_20.pth" beforeDir="false" afterPath="$PROJECT_DIR$/srnet_epoch_20.pth" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/srnet_epoch_25.pth" beforeDir="false" afterPath="$PROJECT_DIR$/srnet_epoch_25.pth" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/srnet_epoch_30.pth" beforeDir="false" afterPath="$PROJECT_DIR$/srnet_epoch_30.pth" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/srnet_epoch_5.pth" beforeDir="false" afterPath="$PROJECT_DIR$/srnet_epoch_5.pth" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/training/train_hybrid.py" beforeDir="false" afterPath="$PROJECT_DIR$/training/train_hybrid.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/training_history.json" beforeDir="false" afterPath="$PROJECT_DIR$/training_history.json" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -35,7 +41,7 @@
   <component name="GithubPullRequestsUISettings">{
   &quot;selectedUrlAndAccountId&quot;: {
     &quot;url&quot;: &quot;https://github.com/ItayChabra/StegAnalysis.git&quot;,
-    &quot;accountId&quot;: &quot;3ddbc781-36df-47f8-9df1-adfbcb2af2c8&quot;
+    &quot;accountId&quot;: &quot;49c7815e-36c8-46ee-987b-029aa3ccc207&quot;
   }
 }</component>
   <component name="McpProjectServerCommands">
@@ -50,42 +56,43 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "Python.Debug_GPU.executor": "Run",
-    "Python.LSB_Sanity_Check.executor": "Run",
-    "Python.StegoLSBDatasetTest.executor": "Run",
-    "Python.class_demo.executor": "Run",
-    "Python.debug_speed.executor": "Run",
-    "Python.lsb_gen.executor": "Run",
-    "Python.main.executor": "Run",
-    "Python.plot_results.executor": "Run",
-    "Python.test_overfitting.executor": "Run",
-    "Python.train_hybrid.executor": "Run",
-    "RunOnceActivity.MCP Project settings loaded": "true",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
-    "ai.playground.ignore.import.keys.banner.in.settings": "true",
-    "com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1": "true",
-    "git-widget-placeholder": "fixLSBGenerator",
-    "junie.onboarding.icon.badge.shown": "true",
-    "node.js.detected.package.eslint": "true",
-    "node.js.detected.package.tslint": "true",
-    "node.js.selected.package.eslint": "(autodetect)",
-    "node.js.selected.package.tslint": "(autodetect)",
-    "nodejs_package_manager_path": "npm",
-    "settings.editor.selected.configurable": "org.jetbrains.plugins.github.ui.GithubSettingsConfigurable",
-    "to.speed.mode.migration.done": "true",
-    "vue.rearranger.settings.migration": "true"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;Python.Debug_GPU.executor&quot;: &quot;Run&quot;,
+    &quot;Python.LSB_Sanity_Check.executor&quot;: &quot;Run&quot;,
+    &quot;Python.StegoLSBDatasetTest.executor&quot;: &quot;Run&quot;,
+    &quot;Python.class_demo.executor&quot;: &quot;Run&quot;,
+    &quot;Python.debug_speed.executor&quot;: &quot;Run&quot;,
+    &quot;Python.lsb_gen.executor&quot;: &quot;Run&quot;,
+    &quot;Python.main.executor&quot;: &quot;Run&quot;,
+    &quot;Python.plot_results.executor&quot;: &quot;Run&quot;,
+    &quot;Python.test_overfitting.executor&quot;: &quot;Run&quot;,
+    &quot;Python.train_hybrid.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.MCP Project settings loaded&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.typescript.service.memoryLimit.init&quot;: &quot;true&quot;,
+    &quot;ai.playground.ignore.import.keys.banner.in.settings&quot;: &quot;true&quot;,
+    &quot;com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;fixLSBGenerator&quot;,
+    &quot;ignore.virus.scanning.warn.message&quot;: &quot;true&quot;,
+    &quot;junie.onboarding.icon.badge.shown&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;org.jetbrains.plugins.github.ui.GithubSettingsConfigurable&quot;,
+    &quot;to.speed.mode.migration.done&quot;: &quot;true&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
-}]]></component>
+}</component>
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
-        <option value="bundled-js-predefined-d6986cc7102b-9b0f141eb926-JavaScript-PY-253.29346.142" />
-        <option value="bundled-python-sdk-f2b7a9f6281b-6e1f45a539f7-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-253.29346.142" />
+        <option value="bundled-js-predefined-d6986cc7102b-9b0f141eb926-JavaScript-PY-253.31033.139" />
+        <option value="bundled-python-sdk-2653e85de345-6d6dccd035ac-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-253.31033.139" />
       </set>
     </attachedChunks>
   </component>
@@ -110,6 +117,13 @@
       <workItem from="1768399144817" duration="61568000" />
       <workItem from="1769084954217" duration="8910000" />
       <workItem from="1769161903928" duration="1099000" />
+      <workItem from="1773331522599" duration="166000" />
+      <workItem from="1773595650024" duration="121000" />
+      <workItem from="1773595789424" duration="606000" />
+      <workItem from="1773596625352" duration="626000" />
+      <workItem from="1773754062410" duration="1000" />
+      <workItem from="1773755590449" duration="2879000" />
+      <workItem from="1773758563852" duration="10192000" />
     </task>
     <task id="LOCAL-00001" summary="First commit">
       <option name="closed" value="true" />
@@ -185,18 +199,18 @@
     <option name="LAST_COMMIT_MESSAGE" value="Used a different dataset from kaggle with LSB embeddings with both grayscale and RGB.&#10;after current training, the model is able to identify 100% of the steganography in that dataset - success!" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/PycharmProjects$LSB_Sanity_Check.coverage" NAME="LSB_Sanity_Check Coverage Results" MODIFIED="1768736581834" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/StegAnalysis$lsb_gen.coverage" NAME="lsb_gen Coverage Results" MODIFIED="1765641911781" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/generators" />
-    <SUITE FILE_PATH="coverage/PycharmProjects$main.coverage" NAME="main Coverage Results" MODIFIED="1768668501805" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
-    <SUITE FILE_PATH="coverage/PycharmProjects$plot_results.coverage" NAME="plot_results Coverage Results" MODIFIED="1768740783152" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/utils" />
     <SUITE FILE_PATH="coverage/PycharmProjects$debug_speed.coverage" NAME="debug_speed Coverage Results" MODIFIED="1767095419925" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
-    <SUITE FILE_PATH="coverage/StegAnalysis$main.coverage" NAME="main Coverage Results" MODIFIED="1766328189278" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
-    <SUITE FILE_PATH="coverage/PycharmProjects$lsb_gen.coverage" NAME="lsb_gen Coverage Results" MODIFIED="1768647875542" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/generators" />
     <SUITE FILE_PATH="coverage/PycharmProjects$test_overfitting.coverage" NAME="test_overfitting Coverage Results" MODIFIED="1769088150538" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
-    <SUITE FILE_PATH="coverage/PycharmProjects$Debug_GPU.coverage" NAME="Debug_GPU Coverage Results" MODIFIED="1767096030995" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
-    <SUITE FILE_PATH="coverage/PycharmProjects$StegoLSBDatasetTest.coverage" NAME="StegoLSBDatasetTest Coverage Results" MODIFIED="1769095159800" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
-    <SUITE FILE_PATH="coverage/StegAnalysis$test_overfitting.coverage" NAME="test_overfitting Coverage Results" MODIFIED="1766328781394" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
-    <SUITE FILE_PATH="coverage/PycharmProjects$class_demo.coverage" NAME="class_demo Coverage Results" MODIFIED="1769162052309" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/PycharmProjects$plot_results.coverage" NAME="plot_results Coverage Results" MODIFIED="1768740783152" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/utils" />
+    <SUITE FILE_PATH="coverage/PycharmProjects$LSB_Sanity_Check.coverage" NAME="LSB_Sanity_Check Coverage Results" MODIFIED="1768736581834" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/PycharmProjects$lsb_gen.coverage" NAME="lsb_gen Coverage Results" MODIFIED="1768647875542" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/generators" />
     <SUITE FILE_PATH="coverage/PycharmProjects$train_hybrid.coverage" NAME="train_hybrid Coverage Results" MODIFIED="1768647776258" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/training" />
+    <SUITE FILE_PATH="coverage/PycharmProjects$class_demo.coverage" NAME="class_demo Coverage Results" MODIFIED="1769162052309" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/StegAnalysis$main.coverage" NAME="main Coverage Results" MODIFIED="1766328189278" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/StegAnalysis$test_overfitting.coverage" NAME="test_overfitting Coverage Results" MODIFIED="1766328781394" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/PycharmProjects$StegoLSBDatasetTest.coverage" NAME="StegoLSBDatasetTest Coverage Results" MODIFIED="1769095159800" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/PycharmProjects$Debug_GPU.coverage" NAME="Debug_GPU Coverage Results" MODIFIED="1767096030995" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/PycharmProjects$main.coverage" NAME="main Coverage Results" MODIFIED="1773760272438" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
   </component>
 </project>
