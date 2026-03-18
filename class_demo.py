@@ -11,7 +11,7 @@ from generators.unified_generator import UnifiedGenerator
 MODEL_PATH        = "srnet_epoch_30.pth"
 DEVICE            = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-CLEAN_IMAGE_PATH  = r"E:\PycharmProjects\data\raw\BossBase and BOWS2\1.pgm"
+CLEAN_IMAGE_PATH  = r"E:\PycharmProjects\data\raw\BossBase and BOWS2\2.pgm"
 
 # Sliding window settings
 WINDOW_SIZE       = 256     # must match the training crop size
