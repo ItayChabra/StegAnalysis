@@ -4,9 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="94558183-8a49-42f9-a799-19f5f2d0f95c" name="Changes" comment="&quot;Edited class demo to test new weights.&quot;">
+    <list default="true" id="94558183-8a49-42f9-a799-19f5f2d0f95c" name="Changes" comment="&quot;Edited training for faster training. Added skip seed.&quot;">
+      <change afterPath="$PROJECT_DIR$/training/evaluate.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/class_demo.py" beforeDir="false" afterPath="$PROJECT_DIR$/class_demo.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/srnet_epoch_10.pth" beforeDir="false" afterPath="$PROJECT_DIR$/srnet_epoch_10.pth" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/srnet_epoch_15.pth" beforeDir="false" afterPath="$PROJECT_DIR$/srnet_epoch_15.pth" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/srnet_epoch_20.pth" beforeDir="false" afterPath="$PROJECT_DIR$/srnet_epoch_20.pth" afterDir="false" />
@@ -55,38 +55,39 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;Python.Debug_GPU.executor&quot;: &quot;Run&quot;,
-    &quot;Python.LSB_Sanity_Check.executor&quot;: &quot;Run&quot;,
-    &quot;Python.StegoLSBDatasetTest.executor&quot;: &quot;Run&quot;,
-    &quot;Python.class_demo.executor&quot;: &quot;Run&quot;,
-    &quot;Python.debug_speed.executor&quot;: &quot;Run&quot;,
-    &quot;Python.lsb_gen.executor&quot;: &quot;Run&quot;,
-    &quot;Python.main.executor&quot;: &quot;Run&quot;,
-    &quot;Python.plot_results.executor&quot;: &quot;Run&quot;,
-    &quot;Python.test_overfitting.executor&quot;: &quot;Run&quot;,
-    &quot;Python.train_hybrid.executor&quot;: &quot;Run&quot;,
-    &quot;RunOnceActivity.MCP Project settings loaded&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.typescript.service.memoryLimit.init&quot;: &quot;true&quot;,
-    &quot;ai.playground.ignore.import.keys.banner.in.settings&quot;: &quot;true&quot;,
-    &quot;com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;fixLSBGenerator&quot;,
-    &quot;ignore.virus.scanning.warn.message&quot;: &quot;true&quot;,
-    &quot;junie.onboarding.icon.badge.shown&quot;: &quot;true&quot;,
-    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
-    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
-    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
-    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
-    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;org.jetbrains.plugins.github.ui.GithubSettingsConfigurable&quot;,
-    &quot;to.speed.mode.migration.done&quot;: &quot;true&quot;,
-    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "Python.Debug_GPU.executor": "Run",
+    "Python.LSB_Sanity_Check.executor": "Run",
+    "Python.StegoLSBDatasetTest.executor": "Run",
+    "Python.class_demo.executor": "Run",
+    "Python.debug_speed.executor": "Run",
+    "Python.evaluate.executor": "Run",
+    "Python.lsb_gen.executor": "Run",
+    "Python.main.executor": "Run",
+    "Python.plot_results.executor": "Run",
+    "Python.test_overfitting.executor": "Run",
+    "Python.train_hybrid.executor": "Run",
+    "RunOnceActivity.MCP Project settings loaded": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
+    "ai.playground.ignore.import.keys.banner.in.settings": "true",
+    "com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1": "true",
+    "git-widget-placeholder": "fixLSBGenerator",
+    "ignore.virus.scanning.warn.message": "true",
+    "junie.onboarding.icon.badge.shown": "true",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "settings.editor.selected.configurable": "org.jetbrains.plugins.github.ui.GithubSettingsConfigurable",
+    "to.speed.mode.migration.done": "true",
+    "vue.rearranger.settings.migration": "true"
   }
-}</component>
+}]]></component>
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
@@ -123,7 +124,7 @@
       <workItem from="1773754062410" duration="1000" />
       <workItem from="1773755590449" duration="2879000" />
       <workItem from="1773758563852" duration="10404000" />
-      <workItem from="1773840538818" duration="11999000" />
+      <workItem from="1773840538818" duration="19044000" />
     </task>
     <task id="LOCAL-00001" summary="First commit">
       <option name="closed" value="true" />
@@ -189,7 +190,15 @@
       <option name="project" value="LOCAL" />
       <updated>1773844258936</updated>
     </task>
-    <option name="localTasksCounter" value="9" />
+    <task id="LOCAL-00009" summary="&quot;Edited training for faster training. Added skip seed.&quot;">
+      <option name="closed" value="true" />
+      <created>1773867184418</created>
+      <option name="number" value="00009" />
+      <option name="presentableId" value="LOCAL-00009" />
+      <option name="project" value="LOCAL" />
+      <updated>1773867184418</updated>
+    </task>
+    <option name="localTasksCounter" value="10" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -214,7 +223,8 @@
     <MESSAGE value="Used a different dataset from kaggle with LSB embeddings with both grayscale and RGB.&#10;after current training, the model is able to identify 100% of the steganography in that dataset - success!" />
     <MESSAGE value="&quot;Fixed training to match GPU&quot;" />
     <MESSAGE value="&quot;Edited class demo to test new weights.&quot;" />
-    <option name="LAST_COMMIT_MESSAGE" value="&quot;Edited class demo to test new weights.&quot;" />
+    <MESSAGE value="&quot;Edited training for faster training. Added skip seed.&quot;" />
+    <option name="LAST_COMMIT_MESSAGE" value="&quot;Edited training for faster training. Added skip seed.&quot;" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/PycharmProjects$debug_speed.coverage" NAME="debug_speed Coverage Results" MODIFIED="1767095419925" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
@@ -229,6 +239,7 @@
     <SUITE FILE_PATH="coverage/StegAnalysis$test_overfitting.coverage" NAME="test_overfitting Coverage Results" MODIFIED="1766328781394" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/PycharmProjects$StegoLSBDatasetTest.coverage" NAME="StegoLSBDatasetTest Coverage Results" MODIFIED="1773866388307" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/PycharmProjects$Debug_GPU.coverage" NAME="Debug_GPU Coverage Results" MODIFIED="1767096030995" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
-    <SUITE FILE_PATH="coverage/PycharmProjects$main.coverage" NAME="main Coverage Results" MODIFIED="1773846324616" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/PycharmProjects$evaluate.coverage" NAME="evaluate Coverage Results" MODIFIED="1773919918673" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/training" />
+    <SUITE FILE_PATH="coverage/PycharmProjects$main.coverage" NAME="main Coverage Results" MODIFIED="1773867901878" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
   </component>
 </project>

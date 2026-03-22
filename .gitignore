@@ -12,3 +12,13 @@ data/
 *.jpg
 *.png
 *.pgm
+
+# Machine Learning Weights
+*.pth
+*.pt
+
+# Datasets and Auto-generated JSON
+dataset_split.json
+*.csv
+training/evaluation_results/
+data/raw/
