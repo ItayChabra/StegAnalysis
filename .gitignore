@@ -13,10 +13,6 @@ data/
 *.png
 *.pgm
 
-# Machine Learning Weights
-*.pth
-*.pt
-
 # Datasets and Auto-generated JSON
 dataset_split.json
 *.csv
