@@ -1,0 +1,58 @@
+{
+  "sequential": {
+    "n_pairs": 494,
+    "auc": 0.992,
+    "eer": 0.0476,
+    "eer_threshold": 0.625,
+    "optimal_threshold": 0.595,
+    "youden_j": 0.9089,
+    "acc_at_optimal": 95.45,
+    "tpr_at_optimal": 0.9636,
+    "fpr_at_optimal": 0.0547,
+    "acc_at_0.5": 94.23,
+    "tpr_at_0.5": 0.9757,
+    "fpr_at_0.5": 0.0911
+  },
+  "random": {
+    "n_pairs": 496,
+    "auc": 0.9951,
+    "eer": 0.0393,
+    "eer_threshold": 0.705,
+    "optimal_threshold": 0.68,
+    "youden_j": 0.9254,
+    "acc_at_optimal": 96.27,
+    "tpr_at_optimal": 0.9718,
+    "fpr_at_optimal": 0.0464,
+    "acc_at_0.5": 94.46,
+    "tpr_at_0.5": 0.9879,
+    "fpr_at_0.5": 0.0988
+  },
+  "skip": {
+    "n_pairs": 497,
+    "auc": 0.9769,
+    "eer": 0.0825,
+    "eer_threshold": 0.595,
+    "optimal_threshold": 0.635,
+    "youden_j": 0.841,
+    "acc_at_optimal": 92.05,
+    "tpr_at_optimal": 0.9095,
+    "fpr_at_optimal": 0.0684,
+    "acc_at_0.5": 91.15,
+    "tpr_at_0.5": 0.9457,
+    "fpr_at_0.5": 0.1227
+  },
+  "edge": {
+    "n_pairs": 497,
+    "auc": 0.8973,
+    "eer": 0.2032,
+    "eer_threshold": 0.275,
+    "optimal_threshold": 0.16,
+    "youden_j": 0.6197,
+    "acc_at_optimal": 80.99,
+    "tpr_at_optimal": 0.8672,
+    "fpr_at_optimal": 0.2475,
+    "acc_at_0.5": 77.77,
+    "tpr_at_0.5": 0.662,
+    "fpr_at_0.5": 0.1066
+  }
+}
