@@ -2,7 +2,8 @@
 evaluate.py — Post-training evaluation for the Adversarial Steganalysis model.
 
 Run ONCE after training is complete, using the best checkpoint:
-    python evaluate.py
+    python training/evaluate.py
+    python training/evaluate.py --model srnet_best_val.pth --split dataset_split.json
 
 Reads dataset_split.json (written by train_hybrid.py) to load the held-out
 test images that were never seen during training or validation.
@@ -15,32 +16,46 @@ Outputs per-strategy:
 """
 
 import os
+import sys
 import json
 import random
+import argparse
 import numpy as np
 import torch
 from PIL import Image
 from torchvision import transforms
 
+# Allow running from project root or from training/ subfolder.
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
 from models.srnet import SRNet
 from generators.unified_generator import UnifiedGenerator
 
-# ==================== CONFIGURATION ====================
-MODEL_PATH  = r"E:\PycharmProjects\srnet_best_val.pth"
-SPLIT_FILE  = r"E:\PycharmProjects\dataset_split.json"
-OUTPUT_DIR  = 'evaluation_results'
+# ==================== CLI / CONFIGURATION ====================
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Steganalysis model evaluation")
+    parser.add_argument(
+        '--model', default='srnet_best_val.pth',
+        help='Path to model checkpoint (default: srnet_best_val.pth)')
+    parser.add_argument(
+        '--split', default='dataset_split.json',
+        help='Path to dataset split JSON (default: dataset_split.json)')
+    parser.add_argument(
+        '--output-dir', default='training/evaluation_results',
+        help='Directory for output files (default: training/evaluation_results)')
+    parser.add_argument(
+        '--images-per-strategy', type=int, default=500,
+        help='Images to evaluate per strategy (default: 500)')
+    return parser.parse_args()
+
+
+OUTPUT_DIR  = 'training/evaluation_results'
 DEVICE      = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-# How many test images to evaluate per strategy.
-# With 15% of ~50k images you have ~7500 test images available.
-# 500 per strategy gives a statistically solid result in reasonable time.
 IMAGES_PER_STRATEGY = 500
-
-# Fixed seed for reproducible test-set sampling.
 EVAL_SEED = 99
 
-# Per-strategy embedding configs used for evaluation.
-# These match the configs in class_demo.py so results are comparable.
 STRATEGY_CONFIGS = {
     'sequential': {
         'gen_type':       'lsb',
@@ -120,7 +135,7 @@ def center_crop_256(image_path):
 
 def get_score(model, image: Image.Image, to_tensor) -> float:
     """Run the model on a single PIL image and return P(stego)."""
-    tensor = to_tensor(image).unsqueeze(0).to(DEVICE)
+    tensor = to_tensor(image).unsqueeze(0).pin_memory().to(DEVICE, non_blocking=True)
     with torch.no_grad():
         output = model(tensor)
         prob   = torch.softmax(output, dim=1)[0, 1].item()
@@ -130,11 +145,6 @@ def get_score(model, image: Image.Image, to_tensor) -> float:
 # ==================== METRICS ====================
 
 def compute_roc(labels, scores):
-    """
-    Compute ROC curve points and AUC without sklearn.
-
-    Returns (fpr_list, tpr_list, thresholds, auc).
-    """
     labels = np.array(labels)
     scores = np.array(scores)
 
@@ -152,7 +162,6 @@ def compute_roc(labels, scores):
         tpr_list.append(tp / n_pos if n_pos > 0 else 0.0)
         fpr_list.append(fp / n_neg if n_neg > 0 else 0.0)
 
-    # AUC via trapezoidal rule (flip so FPR is increasing)
     fpr_arr = np.array(fpr_list[::-1])
     tpr_arr = np.array(tpr_list[::-1])
     auc     = float(np.trapezoid(tpr_arr, fpr_arr))
@@ -161,8 +170,7 @@ def compute_roc(labels, scores):
 
 
 def youden_threshold(fpr_list, tpr_list, thresholds):
-    """Return the threshold that maximises Youden's J = TPR - FPR."""
-    best_j     = -1.0
+    best_j      = -1.0
     best_thresh = 0.5
     for fpr, tpr, t in zip(fpr_list, tpr_list, thresholds):
         j = tpr - fpr
@@ -187,9 +195,8 @@ def compute_accuracy_at_threshold(labels, scores, threshold):
 
 
 def eer(fpr_list, tpr_list, thresholds):
-    """Equal Error Rate — where FPR ≈ FNR."""
-    best_diff  = float('inf')
-    best_eer   = 1.0
+    best_diff   = float('inf')
+    best_eer    = 1.0
     best_thresh = 0.5
     for fpr, tpr, t in zip(fpr_list, tpr_list, thresholds):
         fnr  = 1.0 - tpr
@@ -204,7 +211,6 @@ def eer(fpr_list, tpr_list, thresholds):
 # ==================== ROC PLOT ====================
 
 def save_roc_plot(all_roc_data, output_path):
-    """Save a combined ROC curve plot using matplotlib."""
     try:
         import matplotlib
         matplotlib.use('Agg')
@@ -239,21 +245,20 @@ def save_roc_plot(all_roc_data, output_path):
         print(f"[PLOT] ROC curves saved to {output_path}")
 
     except ImportError:
-        print("[PLOT] matplotlib not installed — skipping ROC plot. "
-              "Install with: pip install matplotlib")
+        print("[PLOT] matplotlib not installed — skipping ROC plot.")
 
 
 # ==================== MAIN EVALUATION ====================
 
-def run_evaluation():
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+def run_evaluation(model_path, split_file, output_dir, images_per_strategy):
+    os.makedirs(output_dir, exist_ok=True)
 
     print("\n" + "=" * 70)
     print("           STEGANALYSIS MODEL EVALUATION")
     print("=" * 70)
 
-    model        = load_model(MODEL_PATH)
-    test_files   = load_test_files(SPLIT_FILE)
+    model        = load_model(model_path)
+    test_files   = load_test_files(split_file)
     unified_gen  = UnifiedGenerator()
     to_tensor    = transforms.ToTensor()
 
@@ -275,9 +280,7 @@ def run_evaluation():
         scores = []
         failed = 0
 
-        # Sample a fresh subset for each strategy — same pool, different indices
-        # so each strategy is evaluated on a representative cross-section.
-        sampled = rng.sample(test_files, min(IMAGES_PER_STRATEGY, len(test_files)))
+        sampled = rng.sample(test_files, min(images_per_strategy, len(test_files)))
 
         for i, path in enumerate(sampled):
             crop = center_crop_256(path)
@@ -285,16 +288,13 @@ def run_evaluation():
                 failed += 1
                 continue
 
-            # Clean score
             clean_score = get_score(model, crop, to_tensor)
             labels.append(0)
             scores.append(clean_score)
 
-            # Stego score
             stego_arr, _ = unified_gen.generate_stego(crop, None, config)
             if stego_arr is None:
                 failed += 1
-                # Remove the clean score we just added since we have no stego pair
                 labels.pop()
                 scores.pop()
                 continue
@@ -314,19 +314,10 @@ def run_evaluation():
             print("  ERROR: No valid image pairs — skipping strategy.")
             continue
 
-        # Compute ROC
         fpr_list, tpr_list, thresholds, auc = compute_roc(labels, scores)
-
-        # Optimal threshold
         opt_thresh, youden_j = youden_threshold(fpr_list, tpr_list, thresholds)
-
-        # Metrics at optimal threshold
         acc, tpr, fpr = compute_accuracy_at_threshold(labels, scores, opt_thresh)
-
-        # EER
         eer_val, eer_thresh = eer(fpr_list, tpr_list, thresholds)
-
-        # Metrics at standard 0.5 threshold for comparison
         acc_05, tpr_05, fpr_05 = compute_accuracy_at_threshold(labels, scores, 0.50)
 
         print(f"\n  --- Results ---")
@@ -342,18 +333,18 @@ def run_evaluation():
         print(f"    FPR:       {fpr_05 * 100:.2f}%")
 
         all_metrics[strategy_name] = {
-            'n_pairs':          (len(labels) // 2),
-            'auc':              round(auc, 4),
-            'eer':              round(eer_val, 4),
-            'eer_threshold':    round(eer_thresh, 4),
-            'optimal_threshold':round(opt_thresh, 4),
-            'youden_j':         round(youden_j, 4),
-            'acc_at_optimal':   round(acc, 2),
-            'tpr_at_optimal':   round(tpr, 4),
-            'fpr_at_optimal':   round(fpr, 4),
-            'acc_at_0.5':       round(acc_05, 2),
-            'tpr_at_0.5':       round(tpr_05, 4),
-            'fpr_at_0.5':       round(fpr_05, 4),
+            'n_pairs':           (len(labels) // 2),
+            'auc':               round(auc, 4),
+            'eer':               round(eer_val, 4),
+            'eer_threshold':     round(eer_thresh, 4),
+            'optimal_threshold': round(opt_thresh, 4),
+            'youden_j':          round(youden_j, 4),
+            'acc_at_optimal':    round(acc, 2),
+            'tpr_at_optimal':    round(tpr, 4),
+            'fpr_at_optimal':    round(fpr, 4),
+            'acc_at_0.5':        round(acc_05, 2),
+            'tpr_at_0.5':        round(tpr_05, 4),
+            'fpr_at_0.5':        round(fpr_05, 4),
         }
         all_roc_data[strategy_name] = {
             'fpr': fpr_list,
@@ -382,17 +373,22 @@ def run_evaluation():
     print("    AUC 0.60-0.80 → Weak detection — more training needed")
     print("    AUC < 0.60  → Near-random — architectural change likely needed")
 
-    # --- SAVE OUTPUTS ---
-    metrics_path = os.path.join(OUTPUT_DIR, 'metrics.json')
+    metrics_path = os.path.join(output_dir, 'metrics.json')
     with open(metrics_path, 'w') as f:
         json.dump(all_metrics, f, indent=2)
     print(f"\n[SAVE] Metrics saved to {metrics_path}")
 
-    roc_path = os.path.join(OUTPUT_DIR, 'roc_curves.png')
+    roc_path = os.path.join(output_dir, 'roc_curves.png')
     save_roc_plot(all_roc_data, roc_path)
 
     print("\n" + "=" * 70 + "\n")
 
 
 if __name__ == "__main__":
-    run_evaluation()
+    args = parse_args()
+    run_evaluation(
+        model_path          = args.model,
+        split_file          = args.split,
+        output_dir          = args.output_dir,
+        images_per_strategy = args.images_per_strategy,
+    )
