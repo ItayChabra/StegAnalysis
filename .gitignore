@@ -17,4 +17,4 @@ data/
 dataset_split.json
 *.csv
 training/evaluation_results/
-data/raw/
+data/raw/srnet_epoch_*.pth

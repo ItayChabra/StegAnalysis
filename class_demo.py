@@ -17,65 +17,67 @@ def parse_args():
         default=os.path.join('data', 'raw', 'BossBase and BOWS2', '2.pgm'),
         help='Path to cover image (default: data/raw/BossBase and BOWS2/2.pgm)')
     parser.add_argument(
-        '--model', default='srnet_epoch_30.pth',
-        help='Path to model checkpoint (default: srnet_epoch_30.pth)')
+        '--model', default='srnet_best_val.pth',
+        help='Path to model checkpoint (default: srnet_best_val.pth)')
     return parser.parse_args()
+
 
 # ==================== CONFIGURATION ====================
 
-DEVICE            = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-# Sliding window settings
-WINDOW_SIZE       = 256
-WINDOW_STRIDE     = 64
-DETECTION_THRESH  = 0.50
-
-SECRET_MESSAGE    = "This is a secret message " * 4096
+DEVICE           = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+WINDOW_SIZE      = 256
+WINDOW_STRIDE    = 64
+DETECTION_THRESH = 0.50
+SECRET_MESSAGE   = "This is a secret message " * 4096
 
 # ==================== STRATEGY CONFIGS ====================
 STRATEGY_CONFIGS = {
-    'sequential': {
-        'gen_type':       'lsb',
-        'strategy':       'sequential',
-        'capacity_ratio': 0.50,
-        'edge_threshold': 0,
-        'bit_depth':      1,
-        'step':           1,
-        'message':        SECRET_MESSAGE,
+    # ── LSB — spatial domain ──────────────────────────────────────────────────
+    'lsb_sequential': {
+        'gen_type': 'lsb', 'strategy': 'sequential',
+        'capacity_ratio': 0.50, 'edge_threshold': 0,
+        'bit_depth': 1, 'step': 1, 'message': SECRET_MESSAGE,
     },
-    'random': {
-        'gen_type':       'lsb',
-        'strategy':       'random',
-        'capacity_ratio': 0.50,
-        'edge_threshold': 0,
-        'bit_depth':      1,
-        'step':           1,
-        'message':        SECRET_MESSAGE,
+    'lsb_random': {
+        'gen_type': 'lsb', 'strategy': 'random',
+        'capacity_ratio': 0.50, 'edge_threshold': 0,
+        'bit_depth': 1, 'step': 1, 'message': SECRET_MESSAGE,
     },
-    'skip': {
+    'lsb_skip': {
         # Best evolved skip genome: Cap 0.56, Edge threshold 95-96
-        'gen_type':       'lsb',
-        'strategy':       'skip',
-        'capacity_ratio': 0.56,
-        'edge_threshold': 95,
-        'bit_depth':      1,
-        'step':           3,
-        'message':        SECRET_MESSAGE,
+        'gen_type': 'lsb', 'strategy': 'skip',
+        'capacity_ratio': 0.56, 'edge_threshold': 95,
+        'bit_depth': 1, 'step': 3, 'message': SECRET_MESSAGE,
     },
-    'edge': {
+    'lsb_edge': {
         # Best evolved edge genome: Cap 0.21, Edge threshold 9
-        'gen_type':       'lsb',
-        'strategy':       'edge',
-        'capacity_ratio': 0.21,
-        'edge_threshold': 9,
-        'bit_depth':      1,
-        'step':           1,
-        'message':        SECRET_MESSAGE,
+        'gen_type': 'lsb', 'strategy': 'edge',
+        'capacity_ratio': 0.21, 'edge_threshold': 9,
+        'bit_depth': 1, 'step': 1, 'message': SECRET_MESSAGE,
+    },
+    # ── DCT — block frequency domain ─────────────────────────────────────────
+    'dct_mid': {
+        'gen_type': 'dct', 'coeff_selection': 'mid',
+        'strength': 3.0, 'capacity_ratio': 0.50,
+    },
+    'dct_low_mid': {
+        'gen_type': 'dct', 'coeff_selection': 'low_mid',
+        'strength': 2.0, 'capacity_ratio': 0.40,
+    },
+    # ── FFT — global frequency domain ────────────────────────────────────────
+    'fft_mid': {
+        'gen_type': 'fft', 'freq_band': 'mid',
+        'strength': 8.0, 'capacity_ratio': 0.30,
+    },
+    'fft_high': {
+        'gen_type': 'fft', 'freq_band': 'high',
+        'strength': 6.0, 'capacity_ratio': 0.25,
     },
 }
 
 
 # ==================== SLIDING WINDOW DETECTION ====================
+
 def sliding_window_detect(ai_model, image: Image.Image) -> dict:
     to_tensor = transforms.ToTensor()
     img_array = np.array(image.convert('L'), dtype=np.uint8)
@@ -95,14 +97,10 @@ def sliding_window_detect(ai_model, image: Image.Image) -> dict:
     with torch.no_grad():
         for top in range(0, h - WINDOW_SIZE + 1, WINDOW_STRIDE):
             for left in range(0, w - WINDOW_SIZE + 1, WINDOW_STRIDE):
-                patch = img_array[top: top + WINDOW_SIZE, left: left + WINDOW_SIZE]
-                patch_img    = Image.fromarray(patch)
-                patch_tensor = to_tensor(patch_img).unsqueeze(0).to(DEVICE)
-
-                output        = ai_model(patch_tensor)
-                probabilities = torch.softmax(output, dim=1)
-                stego_prob    = probabilities[0, 1].item()
-                scores.append(stego_prob)
+                patch        = img_array[top: top + WINDOW_SIZE, left: left + WINDOW_SIZE]
+                patch_tensor = to_tensor(Image.fromarray(patch)).unsqueeze(0).to(DEVICE)
+                prob         = torch.softmax(ai_model(patch_tensor), dim=1)[0, 1].item()
+                scores.append(prob)
 
     if not scores:
         return {'scores': [], 'max_score': 0.0, 'mean_score': 0.0,
@@ -130,6 +128,7 @@ def sliding_window_detect(ai_model, image: Image.Image) -> dict:
 
 
 # ==================== HELPERS ====================
+
 def load_and_prepare_image(path: str) -> Image.Image:
     img  = Image.open(path).convert('L')
     w, h = img.size
@@ -145,7 +144,7 @@ def load_and_prepare_image(path: str) -> Image.Image:
     return img.crop((left, top, left + new_w, top + new_h))
 
 
-def print_window_result(label: str, result: dict):
+def print_window_result(result: dict):
     flagged_pct = 100.0 * result['flagged'] / result['total'] if result['total'] > 0 else 0.0
     print(f"  Max window score:   {result['max_score']  * 100:>6.1f}%")
     print(f"  Mean window score:  {result['mean_score'] * 100:>6.1f}%")
@@ -155,11 +154,13 @@ def print_window_result(label: str, result: dict):
 
 
 # ==================== MAIN DEMO ====================
+
 def run_strategy_evaluation(model_path: str, image_path: str):
     print("\n" + "=" * 70)
     print("     STRATEGY EVALUATION — SLIDING WINDOW STEGANALYSIS")
     print(f"     Window: {WINDOW_SIZE}×{WINDOW_SIZE}  |  Stride: {WINDOW_STRIDE}  |  "
           f"Flag threshold: {DETECTION_THRESH * 100:.0f}%")
+    print(f"     Generators: LSB (4 strategies) + DCT (2 variants) + FFT (2 variants)")
     print("=" * 70)
 
     print(f"\n[SETUP]  Loading model: {model_path}  |  Device: {DEVICE}")
@@ -176,30 +177,35 @@ def run_strategy_evaluation(model_path: str, image_path: str):
     windows_w = (w - WINDOW_SIZE) // WINDOW_STRIDE + 1
     total_windows = windows_h * windows_w
 
-    print(f"         Image:  {os.path.basename(image_path)}  ({w}×{h} after prep)")
-    print(f"         Windows expected per image: "
-          f"{windows_h} rows × {windows_w} cols = {total_windows}")
-    print()
+    print(f"         Image:   {os.path.basename(image_path)}  ({w}×{h} after prep)")
+    print(f"         Windows: {windows_h} rows × {windows_w} cols = {total_windows}\n")
 
+    # Baseline
     print("=" * 70)
     print("[BASELINE]  Clean image (no embedding)")
     print("=" * 70)
     baseline = sliding_window_detect(ai_detector, cover_img)
-    print_window_result("Clean", baseline)
+    print_window_result(baseline)
 
     results_summary = {}
 
     for strategy_name, config in STRATEGY_CONFIGS.items():
+        gt = config['gen_type']
         print()
         print("=" * 70)
-        print(f"[STRATEGY: {strategy_name.upper()}]")
-        print(f"  Capacity: {config['capacity_ratio']:.2f}  |  "
-              f"Edge threshold: {config['edge_threshold']}  |  "
-              f"Step: {config.get('step', 1)}")
+        print(f"[STRATEGY: {strategy_name.upper()}]  ({gt.upper()})")
+        if gt == 'lsb':
+            print(f"  Capacity: {config['capacity_ratio']:.2f}  |  "
+                  f"Edge threshold: {config['edge_threshold']}  |  Step: {config.get('step', 1)}")
+        elif gt == 'dct':
+            print(f"  Capacity: {config['capacity_ratio']:.2f}  |  "
+                  f"Coeff: {config['coeff_selection']}  |  Strength: {config['strength']:.1f}")
+        else:
+            print(f"  Capacity: {config['capacity_ratio']:.2f}  |  "
+                  f"Band: {config['freq_band']}  |  Strength: {config['strength']:.1f}")
         print("=" * 70)
 
         stego_arr, psnr = stego_gen.generate_stego(cover_img, None, config)
-
         if stego_arr is None:
             print("  ERROR: embedding failed — skipping strategy.")
             continue
@@ -219,13 +225,14 @@ def run_strategy_evaluation(model_path: str, image_path: str):
 
         print(f"\n  Running sliding window detection...")
         result = sliding_window_detect(ai_detector, stego_img)
-        print_window_result(strategy_name, result)
+        print_window_result(result)
 
         delta_max  = (result['max_score']  - baseline['max_score'])  * 100
         delta_mean = (result['mean_score'] - baseline['mean_score']) * 100
         print(f"\n  Δ vs baseline  →  Max: {delta_max:+.1f}%   Mean: {delta_mean:+.1f}%")
 
         results_summary[strategy_name] = {
+            'gen_type':   gt,
             'psnr':       psnr,
             'max_score':  result['max_score'],
             'mean_score': result['mean_score'],
@@ -236,29 +243,29 @@ def run_strategy_evaluation(model_path: str, image_path: str):
             'delta_mean': delta_mean,
         }
 
+    # Final table
     print()
     print("=" * 70)
     print("                    FINAL COMPARISON TABLE")
     print("=" * 70)
-    header = f"  {'Strategy':<12}  {'PSNR':>7}  {'Max%':>7}  {'Mean%':>7}  " \
-             f"{'Flagged':>10}  {'Δ Max':>7}  Verdict"
-    print(header)
-    print("  " + "-" * 66)
+    print(f"  {'Strategy':<18}  {'Type':>4}  {'PSNR':>7}  {'Max%':>7}  "
+          f"{'Mean%':>7}  {'Flagged':>10}  {'ΔMax':>6}  Verdict")
+    print("  " + "-" * 70)
 
     flagged_pct_bl = 100.0 * baseline['flagged'] / baseline['total'] if baseline['total'] > 0 else 0
-    print(f"  {'clean':<12}  {'—':>7}  "
+    print(f"  {'clean':<18}  {'—':>4}  {'—':>7}  "
           f"{baseline['max_score'] * 100:>6.1f}%  "
           f"{baseline['mean_score'] * 100:>6.1f}%  "
           f"{baseline['flagged']:>4d}/{baseline['total']:<4d} ({flagged_pct_bl:4.1f}%)  "
-          f"{'—':>7}  {baseline['verdict']}")
+          f"{'—':>6}  {baseline['verdict']}")
 
     for name, r in results_summary.items():
         flagged_pct = 100.0 * r['flagged'] / r['total'] if r['total'] > 0 else 0
-        print(f"  {name:<12}  {r['psnr']:>6.1f}dB  "
+        print(f"  {name:<18}  {r['gen_type']:>4}  {r['psnr']:>6.1f}dB  "
               f"{r['max_score'] * 100:>6.1f}%  "
               f"{r['mean_score'] * 100:>6.1f}%  "
               f"{r['flagged']:>4d}/{r['total']:<4d} ({flagged_pct:4.1f}%)  "
-              f"{r['delta_max']:>+6.1f}%  {r['verdict']}")
+              f"{r['delta_max']:>+5.1f}%  {r['verdict']}")
 
     print("\n" + "=" * 70 + "\n")
 

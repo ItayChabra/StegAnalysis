@@ -8,6 +8,8 @@ Run ONCE after training is complete, using the best checkpoint:
 Reads dataset_split.json (written by train_hybrid.py) to load the held-out
 test images that were never seen during training or validation.
 
+Evaluates 8 scenarios: 4 LSB + 2 DCT + 2 FFT.
+
 Outputs per-strategy:
   - Accuracy, TPR, FPR, AUC
   - Optimal decision threshold (Youden's J)
@@ -34,7 +36,7 @@ from generators.unified_generator import UnifiedGenerator
 # ==================== CLI / CONFIGURATION ====================
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Steganalysis model evaluation")
+    parser = argparse.ArgumentParser(description="Steganalysis model evaluation (LSB + DCT + FFT)")
     parser.add_argument(
         '--model', default='srnet_best_val.pth',
         help='Path to model checkpoint (default: srnet_best_val.pth)')
@@ -50,48 +52,52 @@ def parse_args():
     return parser.parse_args()
 
 
-OUTPUT_DIR  = 'training/evaluation_results'
-DEVICE      = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-IMAGES_PER_STRATEGY = 500
+DEVICE    = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 EVAL_SEED = 99
 
 STRATEGY_CONFIGS = {
-    'sequential': {
-        'gen_type':       'lsb',
-        'strategy':       'sequential',
-        'capacity_ratio': 0.50,
-        'edge_threshold': 0,
-        'bit_depth':      1,
-        'step':           1,
-        'message':        None,
+    # ── LSB — spatial domain ──────────────────────────────────────────────────
+    'lsb_sequential': {
+        'gen_type': 'lsb', 'strategy': 'sequential',
+        'capacity_ratio': 0.50, 'edge_threshold': 0,
+        'bit_depth': 1, 'step': 1, 'message': None,
     },
-    'random': {
-        'gen_type':       'lsb',
-        'strategy':       'random',
-        'capacity_ratio': 0.50,
-        'edge_threshold': 0,
-        'bit_depth':      1,
-        'step':           1,
-        'message':        None,
+    'lsb_random': {
+        'gen_type': 'lsb', 'strategy': 'random',
+        'capacity_ratio': 0.50, 'edge_threshold': 0,
+        'bit_depth': 1, 'step': 1, 'message': None,
     },
-    'skip': {
-        'gen_type':       'lsb',
-        'strategy':       'skip',
-        'capacity_ratio': 0.56,
-        'edge_threshold': 95,
-        'bit_depth':      1,
-        'step':           3,
-        'message':        None,
+    'lsb_skip': {
+        'gen_type': 'lsb', 'strategy': 'skip',
+        'capacity_ratio': 0.56, 'edge_threshold': 95,
+        'bit_depth': 1, 'step': 3, 'message': None,
     },
-    'edge': {
-        'gen_type':       'lsb',
-        'strategy':       'edge',
-        'capacity_ratio': 0.21,
-        'edge_threshold': 9,
-        'bit_depth':      1,
-        'step':           1,
-        'message':        None,
+    'lsb_edge': {
+        'gen_type': 'lsb', 'strategy': 'edge',
+        'capacity_ratio': 0.21, 'edge_threshold': 9,
+        'bit_depth': 1, 'step': 1, 'message': None,
+    },
+    # ── DCT — block frequency domain ─────────────────────────────────────────
+    'dct_mid': {
+        'gen_type': 'dct', 'coeff_selection': 'mid',
+        'strength': 3.0, 'capacity_ratio': 0.50,
+    },
+    'dct_low_mid': {
+        'gen_type': 'dct', 'coeff_selection': 'low_mid',
+        'strength': 2.0, 'capacity_ratio': 0.40,
+    },
+    # ── FFT — global frequency domain ────────────────────────────────────────
+    'fft_low': {
+        'gen_type': 'fft', 'freq_band': 'low',
+        'strength': 10.0, 'capacity_ratio': 0.35,
+    },
+    'fft_mid': {
+        'gen_type': 'fft', 'freq_band': 'mid',
+        'strength': 8.0, 'capacity_ratio': 0.30,
+    },
+    'fft_high': {
+        'gen_type': 'fft', 'freq_band': 'high',
+        'strength': 6.0, 'capacity_ratio': 0.25,
     },
 }
 
@@ -145,13 +151,10 @@ def get_score(model, image: Image.Image, to_tensor) -> float:
 # ==================== METRICS ====================
 
 def compute_roc(labels, scores):
-    labels = np.array(labels)
-    scores = np.array(scores)
-
+    labels     = np.array(labels)
+    scores     = np.array(scores)
     thresholds = np.linspace(0.0, 1.0, 201)
-    tpr_list   = []
-    fpr_list   = []
-
+    tpr_list, fpr_list = [], []
     n_pos = labels.sum()
     n_neg = len(labels) - n_pos
 
@@ -170,13 +173,11 @@ def compute_roc(labels, scores):
 
 
 def youden_threshold(fpr_list, tpr_list, thresholds):
-    best_j      = -1.0
-    best_thresh = 0.5
+    best_j, best_thresh = -1.0, 0.5
     for fpr, tpr, t in zip(fpr_list, tpr_list, thresholds):
         j = tpr - fpr
         if j > best_j:
-            best_j      = j
-            best_thresh = t
+            best_j, best_thresh = j, t
     return best_thresh, best_j
 
 
@@ -194,16 +195,14 @@ def compute_accuracy_at_threshold(labels, scores, threshold):
     return acc, tpr, fpr
 
 
-def eer(fpr_list, tpr_list, thresholds):
-    best_diff   = float('inf')
-    best_eer    = 1.0
-    best_thresh = 0.5
+def eer_metric(fpr_list, tpr_list, thresholds):
+    best_diff, best_eer, best_thresh = float('inf'), 1.0, 0.5
     for fpr, tpr, t in zip(fpr_list, tpr_list, thresholds):
         fnr  = 1.0 - tpr
         diff = abs(fpr - fnr)
         if diff < best_diff:
-            best_diff   = diff
-            best_eer    = (fpr + fnr) / 2.0
+            best_diff  = diff
+            best_eer   = (fpr + fnr) / 2.0
             best_thresh = t
     return best_eer, best_thresh
 
@@ -216,28 +215,27 @@ def save_roc_plot(all_roc_data, output_path):
         matplotlib.use('Agg')
         import matplotlib.pyplot as plt
 
-        fig, ax = plt.subplots(figsize=(8, 6))
-        colors  = {'sequential': '#e74c3c', 'random': '#3498db',
-                   'skip': '#2ecc71',       'edge': '#f39c12'}
-
-        for strategy, roc in all_roc_data.items():
-            fpr = roc['fpr'][::-1]
-            tpr = roc['tpr'][::-1]
-            auc = roc['auc']
-            ax.plot(fpr, tpr,
-                    label=f"{strategy}  (AUC={auc:.3f})",
-                    color=colors.get(strategy, '#888'),
-                    linewidth=2)
-
-        ax.plot([0, 1], [0, 1], 'k--', linewidth=1, label='Random (AUC=0.500)')
-        ax.set_xlabel('False Positive Rate',  fontsize=12)
-        ax.set_ylabel('True Positive Rate',   fontsize=12)
-        ax.set_title('ROC Curves — Per Strategy\n(test set, never seen during training)',
-                     fontsize=13)
-        ax.legend(loc='lower right', fontsize=10)
-        ax.grid(alpha=0.3)
-        ax.set_xlim([0, 1])
-        ax.set_ylim([0, 1])
+        fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+        fig.suptitle('ROC Curves — Per Generator Type (held-out test set)', fontsize=14)
+        palette = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12',
+                   '#9b59b6', '#1abc9c', '#e67e22', '#34495e']
+        groups  = {
+            'LSB Strategies': [k for k in all_roc_data if k.startswith('lsb_')],
+            'DCT Variants':   [k for k in all_roc_data if k.startswith('dct_')],
+            'FFT Variants':   [k for k in all_roc_data if k.startswith('fft_')],
+        }
+        for ax, (title, keys) in zip(axes, groups.items()):
+            for i, key in enumerate(keys):
+                if key not in all_roc_data:
+                    continue
+                r = all_roc_data[key]
+                ax.plot(r['fpr'][::-1], r['tpr'][::-1],
+                        label=f"{key}  AUC={r['auc']:.3f}",
+                        color=palette[i % len(palette)], linewidth=2)
+            ax.plot([0, 1], [0, 1], 'k--', linewidth=1, alpha=0.4)
+            ax.set(title=title, xlabel='FPR', ylabel='TPR', xlim=[0, 1], ylim=[0, 1])
+            ax.legend(fontsize=9)
+            ax.grid(alpha=0.3)
 
         plt.tight_layout()
         plt.savefig(output_path, dpi=150)
@@ -245,7 +243,7 @@ def save_roc_plot(all_roc_data, output_path):
         print(f"[PLOT] ROC curves saved to {output_path}")
 
     except ImportError:
-        print("[PLOT] matplotlib not installed — skipping ROC plot.")
+        print("[PLOT] matplotlib not installed — pip install matplotlib")
 
 
 # ==================== MAIN EVALUATION ====================
@@ -254,7 +252,7 @@ def run_evaluation(model_path, split_file, output_dir, images_per_strategy):
     os.makedirs(output_dir, exist_ok=True)
 
     print("\n" + "=" * 70)
-    print("           STEGANALYSIS MODEL EVALUATION")
+    print("           STEGANALYSIS MODEL EVALUATION  (LSB + DCT + FFT)")
     print("=" * 70)
 
     model        = load_model(model_path)
@@ -268,18 +266,13 @@ def run_evaluation(model_path, split_file, output_dir, images_per_strategy):
     all_metrics  = {}
     all_roc_data = {}
 
-    for strategy_name, config in STRATEGY_CONFIGS.items():
+    for name, config in STRATEGY_CONFIGS.items():
+        gt = config['gen_type']
         print(f"\n{'=' * 70}")
-        print(f"[STRATEGY: {strategy_name.upper()}]")
-        print(f"  Capacity: {config['capacity_ratio']:.2f}  |  "
-              f"Edge threshold: {config['edge_threshold']}  |  "
-              f"Step: {config.get('step', 1)}")
+        print(f"[{name.upper()}]  gen_type={gt}")
         print("=" * 70)
 
-        labels = []
-        scores = []
-        failed = 0
-
+        labels, scores, failed = [], [], 0
         sampled = rng.sample(test_files, min(images_per_strategy, len(test_files)))
 
         for i, path in enumerate(sampled):
@@ -288,9 +281,8 @@ def run_evaluation(model_path, split_file, output_dir, images_per_strategy):
                 failed += 1
                 continue
 
-            clean_score = get_score(model, crop, to_tensor)
             labels.append(0)
-            scores.append(clean_score)
+            scores.append(get_score(model, crop, to_tensor))
 
             stego_arr, _ = unified_gen.generate_stego(crop, None, config)
             if stego_arr is None:
@@ -299,88 +291,68 @@ def run_evaluation(model_path, split_file, output_dir, images_per_strategy):
                 scores.pop()
                 continue
 
-            stego_img   = Image.fromarray(stego_arr.astype(np.uint8))
-            stego_score = get_score(model, stego_img, to_tensor)
             labels.append(1)
-            scores.append(stego_score)
+            scores.append(get_score(model, Image.fromarray(stego_arr.astype(np.uint8)), to_tensor))
 
             if (i + 1) % 100 == 0:
-                print(f"  Progress: {i + 1}/{len(sampled)} images processed...", end='\r')
+                print(f"  {i + 1}/{len(sampled)}...", end='\r')
 
-        print(f"  Processed: {len(sampled) - failed} pairs  "
-              f"({failed} skipped — too small or embedding failed)")
-
+        print(f"  Pairs: {len(sampled) - failed}  ({failed} skipped)")
         if not labels:
-            print("  ERROR: No valid image pairs — skipping strategy.")
+            print("  ERROR: no valid pairs — skipping.")
             continue
 
         fpr_list, tpr_list, thresholds, auc = compute_roc(labels, scores)
-        opt_thresh, youden_j = youden_threshold(fpr_list, tpr_list, thresholds)
-        acc, tpr, fpr = compute_accuracy_at_threshold(labels, scores, opt_thresh)
-        eer_val, eer_thresh = eer(fpr_list, tpr_list, thresholds)
-        acc_05, tpr_05, fpr_05 = compute_accuracy_at_threshold(labels, scores, 0.50)
+        opt_t, yj         = youden_threshold(fpr_list, tpr_list, thresholds)
+        acc,  tpr,  fpr   = compute_accuracy_at_threshold(labels, scores, opt_t)
+        eer_val, eer_t    = eer_metric(fpr_list, tpr_list, thresholds)
+        acc5, tpr5, fpr5  = compute_accuracy_at_threshold(labels, scores, 0.50)
 
         print(f"\n  --- Results ---")
-        print(f"  AUC:                        {auc:.4f}")
-        print(f"  EER:                        {eer_val * 100:.2f}%  (threshold={eer_thresh:.3f})")
-        print(f"\n  At OPTIMAL threshold ({opt_thresh:.3f}, Youden J={youden_j:.3f}):")
-        print(f"    Accuracy:  {acc:.2f}%")
-        print(f"    TPR:       {tpr * 100:.2f}%  (detection rate)")
-        print(f"    FPR:       {fpr * 100:.2f}%  (false positive rate)")
+        print(f"  AUC: {auc:.4f}  |  EER: {eer_val * 100:.2f}%  (threshold={eer_t:.3f})")
+        print(f"\n  At OPTIMAL threshold ({opt_t:.3f}, Youden J={yj:.3f}):")
+        print(f"    Accuracy: {acc:.2f}%  |  TPR: {tpr * 100:.1f}%  |  FPR: {fpr * 100:.1f}%")
         print(f"\n  At STATIC threshold (0.500):")
-        print(f"    Accuracy:  {acc_05:.2f}%")
-        print(f"    TPR:       {tpr_05 * 100:.2f}%")
-        print(f"    FPR:       {fpr_05 * 100:.2f}%")
+        print(f"    Accuracy: {acc5:.2f}%  |  TPR: {tpr5 * 100:.1f}%  |  FPR: {fpr5 * 100:.1f}%")
 
-        all_metrics[strategy_name] = {
-            'n_pairs':           (len(labels) // 2),
+        all_metrics[name] = {
+            'gen_type':          gt,
+            'n_pairs':           len(labels) // 2,
             'auc':               round(auc, 4),
             'eer':               round(eer_val, 4),
-            'eer_threshold':     round(eer_thresh, 4),
-            'optimal_threshold': round(opt_thresh, 4),
-            'youden_j':          round(youden_j, 4),
+            'eer_threshold':     round(eer_t, 4),
+            'optimal_threshold': round(opt_t, 4),
+            'youden_j':          round(yj, 4),
             'acc_at_optimal':    round(acc, 2),
             'tpr_at_optimal':    round(tpr, 4),
             'fpr_at_optimal':    round(fpr, 4),
-            'acc_at_0.5':        round(acc_05, 2),
-            'tpr_at_0.5':        round(tpr_05, 4),
-            'fpr_at_0.5':        round(fpr_05, 4),
+            'acc_at_0.5':        round(acc5, 2),
+            'tpr_at_0.5':        round(tpr5, 4),
+            'fpr_at_0.5':        round(fpr5, 4),
         }
-        all_roc_data[strategy_name] = {
-            'fpr': fpr_list,
-            'tpr': tpr_list,
-            'auc': auc,
-        }
+        all_roc_data[name] = {'fpr': fpr_list, 'tpr': tpr_list, 'auc': auc}
 
     # --- FINAL SUMMARY TABLE ---
     print(f"\n{'=' * 70}")
     print("                    FINAL EVALUATION SUMMARY")
     print("=" * 70)
-    print(f"  {'Strategy':<12}  {'AUC':>6}  {'EER':>6}  "
-          f"{'Opt Thresh':>10}  {'TPR@Opt':>9}  {'FPR@Opt':>9}  {'Acc@Opt':>9}")
-    print("  " + "-" * 66)
+    print(f"  {'Strategy':<18}  {'Type':>4}  {'AUC':>6}  {'EER':>6}  "
+          f"{'OptT':>5}  {'TPR':>6}  {'FPR':>6}  {'Acc':>6}")
+    print("  " + "-" * 65)
+    for n, m in all_metrics.items():
+        print(f"  {n:<18}  {m['gen_type']:>4}  {m['auc']:>6.4f}  "
+              f"{m['eer'] * 100:>5.1f}%  {m['optimal_threshold']:>5.3f}  "
+              f"{m['tpr_at_optimal'] * 100:>5.1f}%  {m['fpr_at_optimal'] * 100:>5.1f}%  "
+              f"{m['acc_at_optimal']:>5.1f}%")
 
-    for name, m in all_metrics.items():
-        print(f"  {name:<12}  {m['auc']:>6.4f}  {m['eer'] * 100:>5.1f}%  "
-              f"{m['optimal_threshold']:>10.3f}  "
-              f"{m['tpr_at_optimal'] * 100:>8.1f}%  "
-              f"{m['fpr_at_optimal'] * 100:>8.1f}%  "
-              f"{m['acc_at_optimal']:>8.1f}%")
-
-    print("\n  Interpretation guide:")
-    print("    AUC > 0.95  → Strong detection")
-    print("    AUC 0.80-0.95 → Good detection")
-    print("    AUC 0.60-0.80 → Weak detection — more training needed")
-    print("    AUC < 0.60  → Near-random — architectural change likely needed")
+    print("\n  AUC: >0.95 strong | 0.80-0.95 good | 0.60-0.80 weak | <0.60 near-random")
 
     metrics_path = os.path.join(output_dir, 'metrics.json')
     with open(metrics_path, 'w') as f:
         json.dump(all_metrics, f, indent=2)
     print(f"\n[SAVE] Metrics saved to {metrics_path}")
 
-    roc_path = os.path.join(output_dir, 'roc_curves.png')
-    save_roc_plot(all_roc_data, roc_path)
-
+    save_roc_plot(all_roc_data, os.path.join(output_dir, 'roc_curves.png'))
     print("\n" + "=" * 70 + "\n")
 
 
