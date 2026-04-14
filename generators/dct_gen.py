@@ -165,9 +165,9 @@ class DCTGenerator(BaseGenerator):
         # ---- Batch inverse DCT ------------------------------------------
         idct_blocks = idctn(dct_blocks, axes=(-2, -1), norm='ortho')
 
-        # Reconstruct the padded image.
+        # Reconstruct the padded image with proper mathematical rounding
         stego_padded = idct_blocks.transpose(0, 2, 1, 3).reshape(ph, pw)
-        stego_array  = np.clip(stego_padded[:h, :w], 0, 255).astype(np.uint8)
+        stego_array = np.clip(np.rint(stego_padded[:h, :w]), 0, 255).astype(np.uint8)
 
         psnr = self._calculate_psnr(img_array, stego_array)
 

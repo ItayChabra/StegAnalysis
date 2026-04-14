@@ -63,7 +63,21 @@ class FFTGenerator(BaseGenerator):
         max_radius = np.sqrt(cy ** 2 + cx ** 2)
         y, x  = np.mgrid[0:h, 0:w]
         dist  = np.sqrt((y - cy) ** 2 + (x - cx) ** 2)
-        return (dist >= lo * max_radius) & (dist < hi * max_radius)
+
+        mask = (dist >= lo * max_radius) & (dist < hi * max_radius)
+        # Exclude the DC component (center) to avoid global brightness shifts
+        mask[cy, cx] = False
+        return mask
+
+    def _shifted_conjugate_partner(self, rows, cols, h, w):
+        """Calculates the conjugate symmetric partner for coordinates in a shifted FFT."""
+        un_rows = (rows + h // 2) % h
+        un_cols = (cols + w // 2) % w
+        partner_un_rows = (-un_rows) % h
+        partner_un_cols = (-un_cols) % w
+        partner_rows = (partner_un_rows + h // 2) % h
+        partner_cols = (partner_un_cols + w // 2) % w
+        return partner_rows, partner_cols
 
     # ------------------------------------------------------------------ interface
 
@@ -95,14 +109,27 @@ class FFTGenerator(BaseGenerator):
 
         # ---- Frequency-band mask ----------------------------------------
         mask = self._build_band_mask(h, w, freq_band)
-        # eligible_rows/cols are 1D arrays of all in-band coordinate indices.
         eligible_rows, eligible_cols = np.where(mask)
-        n_eligible = len(eligible_rows)
 
-        if n_eligible == 0:
+        # Calculate conjugate partners to ensure symmetry
+        partner_rows, partner_cols = self._shifted_conjugate_partner(
+            eligible_rows, eligible_cols, h, w)
+
+        # Keep only one half of the symmetric pairs to avoid double-modifying
+        flat = eligible_rows * w + eligible_cols
+        partner_flat = partner_rows * w + partner_cols
+        keep = flat <= partner_flat
+
+        eligible_rows = eligible_rows[keep]
+        eligible_cols = eligible_cols[keep]
+        partner_rows = partner_rows[keep]
+        partner_cols = partner_cols[keep]
+
+        n_unique = len(eligible_rows)
+        if n_unique == 0:
             return None, 0
 
-        target_count = max(1, int(n_eligible * capacity_ratio))
+        target_count = max(1, int(n_unique * capacity_ratio))
         total_bits   = target_count
 
         # ---- Prepare bits -----------------------------------------------
@@ -117,15 +144,21 @@ class FFTGenerator(BaseGenerator):
             bits = np.random.randint(0, 2, total_bits, dtype=np.uint8)
 
         # ---- Sub-sample within band — vectorized ------------------------
-        chosen_idx  = np.random.choice(n_eligible, target_count, replace=False)
+        chosen_idx  = np.random.choice(n_unique, target_count, replace=False)
         rows        = eligible_rows[chosen_idx]
         cols        = eligible_cols[chosen_idx]
+        pair_rows   = partner_rows[chosen_idx]
+        pair_cols   = partner_cols[chosen_idx]
 
         # ---- Vectorized magnitude quantization --------------------------
+        # Scale strength so it survives the 1/N scaling of the inverse FFT
+        # np.sqrt(h * w) provides a dynamic scale factor (e.g., 256 for a 256x256 image)
+        effective_strength = strength * np.sqrt(h * w)
+
         # No Python loop — all target_count components are processed at once.
         mags = magnitude[rows, cols].copy()                         # (target_count,)
 
-        q    = np.round(mags / strength).astype(np.int64)
+        q    = np.round(mags / effective_strength).astype(np.int64)
 
         # Enforce parity: bit=1 → q odd; bit=0 → q even.
         # wrong_parity is True wherever the current parity doesn't match the bit.
@@ -134,14 +167,21 @@ class FFTGenerator(BaseGenerator):
         wrong_parity   = current_even == want_odd                   # XOR logic
         q[wrong_parity] += 1
 
-        modified_mag         = magnitude.copy()
-        modified_mag[rows, cols] = np.maximum(0.0, q * strength)
+        modified_mag = magnitude.copy()
+        new_mag = np.maximum(0.0, q * effective_strength)
+        modified_mag[rows, cols] = new_mag
+
+        # Apply exact same modification to conjugate partners
+        non_self = (rows != pair_rows) | (cols != pair_cols)
+        modified_mag[pair_rows[non_self], pair_cols[non_self]] = new_mag[non_self]
 
         # ---- Inverse FFT ------------------------------------------------
         modified_fft_shifted = modified_mag * np.exp(1j * phase)
         modified_fft         = np.fft.ifftshift(modified_fft_shifted)
         stego_float          = np.real(np.fft.ifft2(modified_fft))
-        stego_array          = np.clip(stego_float, 0, 255).astype(np.uint8)
+
+        # Proper mathematical rounding before casting to uint8
+        stego_array          = np.clip(np.rint(stego_float), 0, 255).astype(np.uint8)
 
         psnr = self._calculate_psnr(img_array, stego_array)
 
