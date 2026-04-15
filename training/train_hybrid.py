@@ -30,7 +30,7 @@ torch.backends.cudnn.allow_tf32       = True
 # --- SETTINGS ---
 BATCH_SIZE                  = 64
 GRADIENT_ACCUMULATION_STEPS = 2
-EPOCHS                      = 40
+EPOCHS                      = 60
 POPULATION_SIZE             = 20
 NUM_WORKERS  = max(1, multiprocessing.cpu_count() - 2)
 DEVICE       = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -105,11 +105,33 @@ TEST_RATIO  = 0.15
 SPLIT_FILE  = 'dataset_split.json'
 SPLIT_SEED  = 42
 
-CURRICULUM_END          = 6
-CURRICULUM_BLEND_EPOCHS = 2
+CURRICULUM_END          = 8
+CURRICULUM_BLEND_EPOCHS = 3
 
 
 # ==================== GENOME HELPERS ====================
+
+# Precomputed scale factor for 256x256 images (~11.09)
+# Safe upper bound for the DC component in log-magnitude FFT
+_LOG_FFT_SCALE = math.log1p(256 * 256)
+
+
+def compute_log_fft(spatial_tensor):
+    """
+    Convert a (1, H, W) spatial tensor to (1, H, W) log-magnitude FFT.
+    Uses a precomputed fixed constant to preserve absolute payload differences.
+    """
+    # Native PyTorch FFT (keeps data on GPU, much faster than Numpy)
+    fft_complex = torch.fft.fft2(spatial_tensor)
+
+    # Shift the zero-frequency component to the center
+    fft_shifted = torch.fft.fftshift(fft_complex, dim=(-2, -1))
+
+    # Compute log magnitude ( log(1 + abs(x)) )
+    log_magnitude = torch.log1p(torch.abs(fft_shifted))
+
+    # Divide by the global constant
+    return log_magnitude / _LOG_FFT_SCALE
 
 def get_niche(genome):
     """
@@ -290,7 +312,7 @@ class EvolutionaryManager:
             'name':            name,
             'gen_type':        'dct',
             'coeff_selection': coeff_selection or random.choice(DCT_COEFF_MODES),
-            'strength':        round(random.uniform(1.0, 8.0), 2),
+            'strength':        round(random.uniform(2.0, 8.0), 2),
             'capacity_ratio':  random.triangular(MIN_CAPACITY, MAX_CAPACITY,
                                                  MIN_CAPACITY + 0.15),
         }
@@ -300,7 +322,7 @@ class EvolutionaryManager:
             'name':           name,
             'gen_type':       'fft',
             'freq_band':      freq_band or random.choice(FFT_FREQ_BANDS),
-            'strength':       round(random.uniform(2.0, 20.0), 2),
+            'strength':       round(random.uniform(3.0, 20.0), 2),
             'capacity_ratio': random.triangular(MIN_CAPACITY, MAX_CAPACITY,
                                                 MIN_CAPACITY + 0.15),
         }
@@ -359,7 +381,7 @@ class EvolutionaryManager:
                 if field == 'coeff':
                     g['coeff_selection'] = random.choice(DCT_COEFF_MODES)
                 elif field == 'strength':
-                    g['strength'] = max(0.5, min(10.0,
+                    g['strength'] = max(2.0, min(10.0,
                         g['strength'] + random.uniform(-1.5, 1.5)))
                 elif field == 'capacity':
                     g['capacity_ratio'] = max(MIN_CAPACITY, min(MAX_CAPACITY,
@@ -376,7 +398,7 @@ class EvolutionaryManager:
                     other_bands = [b for b in FFT_FREQ_BANDS if b != g['freq_band']]
                     g['freq_band'] = random.choice(other_bands)
                 elif field == 'strength':
-                    g['strength'] = max(1.0, min(25.0,
+                    g['strength'] = max(3.0, min(25.0,
                         g['strength'] + random.uniform(-3.0, 3.0)))
                 elif field == 'capacity':
                     g['capacity_ratio'] = max(MIN_CAPACITY, min(MAX_CAPACITY,
@@ -818,16 +840,21 @@ def run_validation(model, val_lossy, val_lossless, unified_gen, criterion, epoch
             if w < 256 or h < 256:
                 continue
             left = (w - 256) // 2
-            top  = (h - 256) // 2
+            top = (h - 256) // 2
             crop = crop_img.crop((left, top, left + 256, top + 256))
 
             stego_arr, _ = unified_gen.generate_stego(crop, None, config)
             if stego_arr is None:
                 continue
 
-            all_inputs.append(to_tensor(crop))
+            spatial_cover = to_tensor(crop)
+            log_fft_cover = compute_log_fft(spatial_cover)
+            all_inputs.append(torch.cat([spatial_cover, log_fft_cover], dim=0))
             all_labels.append(0)
-            all_inputs.append(to_tensor(Image.fromarray(stego_arr)))
+
+            spatial_stego = to_tensor(Image.fromarray(stego_arr))
+            log_fft_stego = compute_log_fft(spatial_stego)
+            all_inputs.append(torch.cat([spatial_stego, log_fft_stego], dim=0))
             all_labels.append(1)
         except Exception:
             continue
@@ -858,17 +885,14 @@ def run_validation(model, val_lossy, val_lossless, unified_gen, criterion, epoch
 # ==================== TRAINING ====================
 
 def run_training():
-    print(f"Starting Hybrid Training Run 6 on {DEVICE}")
-    print(f"Run 6 changes vs run 5:")
-    print(f"  FFT niche: split into fft_low/fft_mid/fft_high (was single 'fft')")
-    print(f"  FFT combined batch cap: {FFT_COMBINED_BATCH_CAP*100:.0f}% of free slots (new)")
-    print(f"  Hard edge floor: {HARD_EDGE_BATCH_FRACTION*100:.0f}% (threshold<=9, cap<=0.25) (new)")
-    print(f"  Any edge floor:  {ANY_EDGE_BATCH_FRACTION*100:.0f}% (any edge genome)")
-    print(f"  MAX_LR: {MAX_LR} (was 0.001)")
-    print(f"  weight_decay: 2e-4 (was 1e-4)")
-    print(f"  gradient clipping: max_norm=1.0 (new)")
-    print(f"Effective batch: {BATCH_SIZE * GRADIENT_ACCUMULATION_STEPS}  |  "
-          f"Fixed CUDA batch: {FIXED_BATCH_SIZE}")
+    print(f"Starting Hybrid Training Run 13 on {DEVICE}")
+    print(f"Run 13 changes vs run 12:")
+    print(f"  Architecture: Triple-branch frontend (SRM + spatial learnable + FFT learnable)")
+    print(f"  Branch A: 11 frozen SRM filters (spatial only)")
+    print(f"  Branch B: 21 learnable filters (spatial only — LSB/DCT specialization)")
+    print(f"  Branch C: 32 learnable filters (FFT only — frequency ring specialization)")
+    print(f"  Label smoothing: 0.1 (threshold calibration fix)")
+    print(f"  CURRICULUM_END: {CURRICULUM_END}  CURRICULUM_BLEND_EPOCHS: {CURRICULUM_BLEND_EPOCHS}")
 
     lossy_files, lossless_files = load_balanced_dataset('data/raw')
     split = create_or_load_split(lossy_files, lossless_files)
@@ -889,11 +913,11 @@ def run_training():
     optimizer = optim.Adam(discriminator.parameters(), lr=INITIAL_LR, weight_decay=2e-4)
 
     # reduction='none' so padded slots can be zeroed out of the loss.
-    criterion   = nn.CrossEntropyLoss(reduction='none')
+    criterion   = nn.CrossEntropyLoss(reduction='none', label_smoothing=0.1)
     scaler      = torch.amp.GradScaler('cuda')
     unified_gen = UnifiedGenerator()
     evo_manager = EvolutionaryManager()
-    to_tensor   = transforms.ToTensor()
+    # to_tensor   = transforms.ToTensor()
 
     training_history = {
         'epochs': [], 'loss': [], 'model_acc': [], 'val_loss': [], 'val_acc': [],
@@ -987,9 +1011,15 @@ def run_training():
                         if stego_arr is None:
                             return None
 
-                        return (TF.to_tensor(cover_crop),
-                                TF.to_tensor(Image.fromarray(stego_arr)),
-                                genome['name'])
+                        spatial_cover = TF.to_tensor(cover_crop)
+                        log_fft_cover = compute_log_fft(spatial_cover)
+                        cover_t = torch.cat([spatial_cover, log_fft_cover], dim=0)
+
+                        spatial_stego = TF.to_tensor(Image.fromarray(stego_arr))
+                        log_fft_stego = compute_log_fft(spatial_stego)
+                        stego_t = torch.cat([spatial_stego, log_fft_stego], dim=0)
+
+                        return (cover_t, stego_t, genome['name'])
 
                     except Exception as e:
                         print(f"\n[GEN ERROR] {genome.get('name', 'Unknown')}: {str(e)}")
@@ -1021,17 +1051,19 @@ def run_training():
 
                 if epoch == 0 and step == 0:
                     print("\n" + "=" * 65)
-                    print("DIAGNOSTIC CHECK")
+                    print("DIAGNOSTIC CHECK (Run 12: Spatial Only)")
                     print("=" * 65)
-                    # ONLY select the real items, ignore the padding at the end
-                    covers = inputs_t[:n_real][0::2].cpu().numpy()
-                    stegos = inputs_t[:n_real][1::2].cpu().numpy()
+
+                    # FIX: Slice Channel 0 (Spatial) only.
+                    # inputs_t[:n_real] has shape (B, 2, 256, 256)
+                    # We take every other one (0::2 is covers, 1::2 is stegos)
+                    real_data = inputs_t[:n_real]
+                    covers = real_data[0::2, 0:1, :, :].cpu().numpy()
+                    stegos = real_data[1::2, 0:1, :, :].cpu().numpy()
+
                     diff = np.abs(covers - stegos)
                     mod_rate = 100 * (diff > 0).sum() / diff.size
-                    print(f"  Fixed batch: {FIXED_BATCH_SIZE}  Real: {n_real}  "
-                          f"Padded: {FIXED_BATCH_SIZE - n_real}")
-                    print(f"  Max Pixel Diff:    {diff.max():.6f}")
-                    print(f"  Mean Pixel Diff:   {diff.mean():.6f}")
+                    print(f"  Max Pixel Diff:    {diff.max():.6f}")  # Should now be 1/255 for 1-bit LSB
                     print(f"  Modification Rate: {mod_rate:.2f}%")
                     print("=" * 65 + "\n")
 

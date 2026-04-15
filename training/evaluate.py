@@ -23,7 +23,7 @@ Outputs:
   - ROC curves (one per strategy group) saved to evaluation_results/roc_curves.png
   - Min-AUC summary saved to evaluation_results/min_auc_summary.json
 """
-
+import math
 import os
 import sys
 import json
@@ -117,9 +117,9 @@ STRATEGY_CONFIGS = {
     ],
 
     'dct_low_mid': [
-        {'label': 'low_strength',  'gen_type': 'dct', 'coeff_selection': 'low_mid', 'strength': 1.0, 'capacity_ratio': 0.40},
-        {'label': 'mid_strength',  'gen_type': 'dct', 'coeff_selection': 'low_mid', 'strength': 2.0, 'capacity_ratio': 0.40},  # reference
-        {'label': 'high_strength', 'gen_type': 'dct', 'coeff_selection': 'low_mid', 'strength': 4.0, 'capacity_ratio': 0.40},
+        {'label': 'low_strength',  'gen_type': 'dct', 'coeff_selection': 'low_mid', 'strength': 2.0, 'capacity_ratio': 0.40},
+        {'label': 'mid_strength',  'gen_type': 'dct', 'coeff_selection': 'low_mid', 'strength': 3.0, 'capacity_ratio': 0.40},  # reference
+        {'label': 'high_strength', 'gen_type': 'dct', 'coeff_selection': 'low_mid', 'strength': 5.0, 'capacity_ratio': 0.40},
     ],
 
     # ── FFT Global Frequency ──────────────────────────────────────────────────
@@ -163,6 +163,27 @@ def auc_label(auc):
 
 
 # ==================== HELPERS ====================
+# Precomputed scale factor for 256x256 images (~11.09)
+# Safe upper bound for the DC component in log-magnitude FFT
+_LOG_FFT_SCALE = math.log1p(256 * 256)
+
+
+def compute_log_fft(spatial_tensor):
+    """
+    Convert a (1, H, W) spatial tensor to (1, H, W) log-magnitude FFT.
+    Uses a precomputed fixed constant to preserve absolute payload differences.
+    """
+    # Native PyTorch FFT (keeps data on GPU, much faster than Numpy)
+    fft_complex = torch.fft.fft2(spatial_tensor)
+
+    # Shift the zero-frequency component to the center
+    fft_shifted = torch.fft.fftshift(fft_complex, dim=(-2, -1))
+
+    # Compute log magnitude ( log(1 + abs(x)) )
+    log_magnitude = torch.log1p(torch.abs(fft_shifted))
+
+    # Divide by the global constant
+    return log_magnitude / _LOG_FFT_SCALE
 
 def load_model(model_path):
     print(f"[SETUP] Loading model: {model_path}  |  Device: {DEVICE}")
@@ -200,11 +221,16 @@ def center_crop_256(image_path):
 
 
 def get_score(model, image: Image.Image, to_tensor) -> float:
-    """Run the model on a single PIL image and return P(stego)."""
-    tensor = to_tensor(image).unsqueeze(0).pin_memory().to(DEVICE, non_blocking=True)
+    """Run the model on a single PIL image (calculates spatial + Log-FFT) and return P(stego)."""
+    spatial = to_tensor(image).to(DEVICE)
+    log_fft = compute_log_fft(spatial)
+
+    # Concatenate and add batch dimension
+    tensor = torch.cat([spatial, log_fft], dim=0).unsqueeze(0)
+
     with torch.no_grad():
         output = model(tensor)
-        prob   = torch.softmax(output, dim=1)[0, 1].item()
+        prob = torch.softmax(output, dim=1)[0, 1].item()
     return prob
 
 

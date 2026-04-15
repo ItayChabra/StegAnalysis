@@ -2,66 +2,50 @@ import torch
 import torch.nn as nn
 import numpy as np
 
+
 class SRNet(nn.Module):
     def __init__(self, num_classes=2):
         super(SRNet, self).__init__()
 
-        # --- IMPROVED SRM INITIALIZATION (Claude's Version) ---
-        # Layer 1: 64 Filters total. We will set ~12 of them to SRM, rest random.
-        self.layer1 = nn.Conv2d(1, 64, kernel_size=3, stride=1, padding=1, bias=False)
+        # --- TRIPLE-BRANCH FRONTEND (Run 13) ---
 
-        srm_weights = np.zeros((64, 1, 3, 3), dtype=np.float32)
+        # Branch A: 11 frozen SRM filters — reads spatial only (Channel 0)
+        self.branch_a = nn.Conv2d(1, 11, kernel_size=3, stride=1, padding=1, bias=False)
+        srm_weights = np.zeros((11, 1, 3, 3), dtype=np.float32)
 
-        # Filters 0-3: Basic High-Pass (KV kernel) with noise variation
-        base_kv = [[-1, 2, -1],
-                   [2, -4, 2],
-                   [-1, 2, -1]]
+        # Filters 0-3: KV kernel jitter
+        base_kv = [[-1, 2, -1], [2, -4, 2], [-1, 2, -1]]
         for i in range(4):
-            srm_weights[i, 0] = base_kv
-            srm_weights[i, 0] += np.random.randn(3, 3) * 0.05  # Small jitter
+            srm_weights[i, 0] = base_kv + np.random.randn(3, 3) * 0.05
 
-        # Filters 4-7: Edge Detectors
-        base_edge = [[-1, -1, -1],
-                     [-1, 8, -1],
-                     [-1, -1, -1]]
+        # Filters 4-7: Edge Detectors jitter
+        base_edge = [[-1, -1, -1], [-1, 8, -1], [-1, -1, -1]]
         for i in range(4, 8):
-            srm_weights[i, 0] = base_edge
-            srm_weights[i, 0] += np.random.randn(3, 3) * 0.05
-
-        # Filter 8: Horizontal Edge
-        srm_weights[8, 0] = [[-1, -2, -1],
-                             [0, 0, 0],
-                             [1, 2, 1]]
-
-        # Filter 9: Vertical Edge
-        srm_weights[9, 0] = [[-1, 0, 1],
-                             [-2, 0, 2],
-                             [-1, 0, 1]]
-
-        # Filter 10: Square Kernel
-        srm_weights[10, 0] = [[-1, 2, -1],
-                              [2, -4, 2],
-                              [-1, 2, -1]]
-
-        # Normalize specific filters
-        srm_weights[:11] = srm_weights[:11] / 4.0
+            srm_weights[i, 0] = base_edge + np.random.randn(3, 3) * 0.05
+        srm_weights[8, 0] = [[-1, -2, -1], [0, 0, 0], [1, 2, 1]]  # Horizontal
+        srm_weights[9, 0] = [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]]  # Vertical
+        srm_weights[10, 0] = [[-1, 2, -1], [2, -4, 2], [-1, 2, -1]]  # Square
 
         with torch.no_grad():
-            # Copy specific SRM filters to first 11 slots
-            self.layer1.weight[:11].copy_(torch.from_numpy(srm_weights[:11]))
-            # Initialize the remaining 53 filters with Kaiming Normal (Standard Deep Learning)
-            nn.init.kaiming_normal_(self.layer1.weight[11:], mode='fan_out', nonlinearity='relu')
+            self.branch_a.weight.copy_(torch.from_numpy(srm_weights / 4.0))
+        self.branch_a.requires_grad_(False)
+        self.bn_a = nn.BatchNorm2d(11)
 
-        # Wrap in Sequential
-        self.layer1 = nn.Sequential(
-            self.layer1,
-            nn.BatchNorm2d(64),
-            nn.ReLU(inplace=True)
-        )
+        # Branch B: 53 learnable spatial filters — reads spatial only (Channel 0)
+        # Purpose: Learn complex LSB/DCT patterns that rigid SRM misses
+        self.branch_b = nn.Conv2d(1, 53, kernel_size=3, stride=1, padding=1, bias=False)
+        self.bn_b = nn.BatchNorm2d(53)
 
-        # Layer 2: Reduce to 16 feature maps
+        # Branch C: 21 learnable FFT filters — reads log-FFT only (Channel 1)
+        # Purpose: Specialize exclusively in global frequency ring detection
+        self.branch_c = nn.Conv2d(1, 21, kernel_size=3, stride=1, padding=1, bias=False)
+        self.bn_c = nn.BatchNorm2d(21)
+
+        self.relu = nn.ReLU(inplace=True)
+
+        # Layer 2: Receives 11+53+21 = 85 merged channels
         self.layer2 = nn.Sequential(
-            nn.Conv2d(64, 16, kernel_size=3, stride=1, padding=1, bias=False),
+            nn.Conv2d(85, 16, kernel_size=3, stride=1, padding=1, bias=False),
             nn.BatchNorm2d(16),
             nn.ReLU(inplace=True)
         )
@@ -101,10 +85,11 @@ class SRNet(nn.Module):
         return ResidualBlock(nn.Sequential(*layers), in_channels, out_channels, pool)
 
     def _initialize_weights(self):
-        # Claude's Fix: Robust check to skip layer1
         for name, m in self.named_modules():
-            if 'layer1' in name:
-                continue  # Skip because we did it manually
+            # Skip branch_a (SRM weights set manually above).
+            # branch_b / branch_c keep PyTorch default kaiming_uniform_ — intentional.
+            if any(x in name for x in ['branch_a', 'branch_b', 'branch_c']):
+                continue
             if isinstance(m, nn.Conv2d):
                 nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
             elif isinstance(m, nn.BatchNorm2d):
@@ -115,7 +100,17 @@ class SRNet(nn.Module):
                 nn.init.constant_(m.bias, 0)
 
     def forward(self, x):
-        x = self.layer1(x)
+        # x: (B, 2, H, W)
+        spatial = x[:, 0:1, :, :]
+        freq = x[:, 1:2, :, :]
+
+        out_a = self.bn_a(self.branch_a(spatial))
+        out_b = self.bn_b(self.branch_b(spatial))
+        out_c = self.bn_c(self.branch_c(freq))
+
+        # Merge isolated domain features into 85-channel map
+        x = self.relu(torch.cat([out_a, out_b, out_c], dim=1))
+
         x = self.layer2(x)
         x = self.layer3(x)
         x = self.layer4(x)
