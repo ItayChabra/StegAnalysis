@@ -1,58 +1,704 @@
 {
-  "sequential": {
-    "n_pairs": 494,
-    "auc": 0.992,
-    "eer": 0.0476,
-    "eer_threshold": 0.625,
-    "optimal_threshold": 0.595,
-    "youden_j": 0.9089,
-    "acc_at_optimal": 95.45,
-    "tpr_at_optimal": 0.9636,
-    "fpr_at_optimal": 0.0547,
-    "acc_at_0.5": 94.23,
-    "tpr_at_0.5": 0.9757,
-    "fpr_at_0.5": 0.0911
+  "lsb_sequential": {
+    "gen_type": "lsb",
+    "mean_auc": 0.9772,
+    "min_auc": 0.949,
+    "max_auc": 0.9956,
+    "configs": [
+      {
+        "config_label": "low_cap",
+        "gen_type": "lsb",
+        "config": {
+          "gen_type": "lsb",
+          "strategy": "sequential",
+          "capacity_ratio": 0.25,
+          "edge_threshold": 0,
+          "bit_depth": 1,
+          "step": 1,
+          "message": null
+        },
+        "n_pairs": 300,
+        "auc": 0.949,
+        "eer": 0.1433,
+        "eer_threshold": 0.45,
+        "optimal_threshold": 0.41,
+        "youden_j": 0.7267,
+        "acc_at_optimal": 86.33,
+        "tpr_at_optimal": 0.9033,
+        "fpr_at_optimal": 0.1767,
+        "acc_at_0.5": 85.33,
+        "tpr_at_0.5": 0.81,
+        "fpr_at_0.5": 0.1033
+      },
+      {
+        "config_label": "mid_cap",
+        "gen_type": "lsb",
+        "config": {
+          "gen_type": "lsb",
+          "strategy": "sequential",
+          "capacity_ratio": 0.5,
+          "edge_threshold": 0,
+          "bit_depth": 1,
+          "step": 1,
+          "message": null
+        },
+        "n_pairs": 298,
+        "auc": 0.9869,
+        "eer": 0.0621,
+        "eer_threshold": 0.53,
+        "optimal_threshold": 0.51,
+        "youden_j": 0.8826,
+        "acc_at_optimal": 94.13,
+        "tpr_at_optimal": 0.953,
+        "fpr_at_optimal": 0.0705,
+        "acc_at_0.5": 93.29,
+        "tpr_at_0.5": 0.953,
+        "fpr_at_0.5": 0.0872
+      },
+      {
+        "config_label": "high_cap",
+        "gen_type": "lsb",
+        "config": {
+          "gen_type": "lsb",
+          "strategy": "sequential",
+          "capacity_ratio": 0.75,
+          "edge_threshold": 0,
+          "bit_depth": 1,
+          "step": 1,
+          "message": null
+        },
+        "n_pairs": 299,
+        "auc": 0.9956,
+        "eer": 0.0401,
+        "eer_threshold": 0.59,
+        "optimal_threshold": 0.56,
+        "youden_j": 0.9298,
+        "acc_at_optimal": 96.49,
+        "tpr_at_optimal": 0.9732,
+        "fpr_at_optimal": 0.0435,
+        "acc_at_0.5": 94.48,
+        "tpr_at_0.5": 0.99,
+        "fpr_at_0.5": 0.1003
+      }
+    ]
   },
-  "random": {
-    "n_pairs": 496,
-    "auc": 0.9951,
-    "eer": 0.0393,
-    "eer_threshold": 0.705,
-    "optimal_threshold": 0.68,
-    "youden_j": 0.9254,
-    "acc_at_optimal": 96.27,
-    "tpr_at_optimal": 0.9718,
-    "fpr_at_optimal": 0.0464,
-    "acc_at_0.5": 94.46,
-    "tpr_at_0.5": 0.9879,
-    "fpr_at_0.5": 0.0988
+  "lsb_random": {
+    "gen_type": "lsb",
+    "mean_auc": 0.9955,
+    "min_auc": 0.9945,
+    "max_auc": 0.9967,
+    "configs": [
+      {
+        "config_label": "low_cap",
+        "gen_type": "lsb",
+        "config": {
+          "gen_type": "lsb",
+          "strategy": "random",
+          "capacity_ratio": 0.25,
+          "edge_threshold": 0,
+          "bit_depth": 1,
+          "step": 1,
+          "message": null
+        },
+        "n_pairs": 297,
+        "auc": 0.9945,
+        "eer": 0.037,
+        "eer_threshold": 0.555,
+        "optimal_threshold": 0.53,
+        "youden_j": 0.9259,
+        "acc_at_optimal": 96.3,
+        "tpr_at_optimal": 0.9663,
+        "fpr_at_optimal": 0.0404,
+        "acc_at_0.5": 95.62,
+        "tpr_at_0.5": 0.9731,
+        "fpr_at_0.5": 0.0606
+      },
+      {
+        "config_label": "mid_cap",
+        "gen_type": "lsb",
+        "config": {
+          "gen_type": "lsb",
+          "strategy": "random",
+          "capacity_ratio": 0.5,
+          "edge_threshold": 0,
+          "bit_depth": 1,
+          "step": 1,
+          "message": null
+        },
+        "n_pairs": 299,
+        "auc": 0.9953,
+        "eer": 0.0368,
+        "eer_threshold": 0.58,
+        "optimal_threshold": 0.555,
+        "youden_j": 0.9331,
+        "acc_at_optimal": 96.66,
+        "tpr_at_optimal": 0.9766,
+        "fpr_at_optimal": 0.0435,
+        "acc_at_0.5": 95.65,
+        "tpr_at_0.5": 0.9799,
+        "fpr_at_0.5": 0.0669
+      },
+      {
+        "config_label": "high_cap",
+        "gen_type": "lsb",
+        "config": {
+          "gen_type": "lsb",
+          "strategy": "random",
+          "capacity_ratio": 0.75,
+          "edge_threshold": 0,
+          "bit_depth": 1,
+          "step": 1,
+          "message": null
+        },
+        "n_pairs": 298,
+        "auc": 0.9967,
+        "eer": 0.0319,
+        "eer_threshold": 0.57,
+        "optimal_threshold": 0.6,
+        "youden_j": 0.9497,
+        "acc_at_optimal": 97.48,
+        "tpr_at_optimal": 0.9698,
+        "fpr_at_optimal": 0.0201,
+        "acc_at_0.5": 94.63,
+        "tpr_at_0.5": 0.9832,
+        "fpr_at_0.5": 0.0906
+      }
+    ]
   },
-  "skip": {
-    "n_pairs": 497,
-    "auc": 0.9769,
-    "eer": 0.0825,
-    "eer_threshold": 0.595,
-    "optimal_threshold": 0.635,
-    "youden_j": 0.841,
-    "acc_at_optimal": 92.05,
-    "tpr_at_optimal": 0.9095,
-    "fpr_at_optimal": 0.0684,
-    "acc_at_0.5": 91.15,
-    "tpr_at_0.5": 0.9457,
-    "fpr_at_0.5": 0.1227
+  "lsb_skip": {
+    "gen_type": "lsb",
+    "mean_auc": 0.9933,
+    "min_auc": 0.9897,
+    "max_auc": 0.9961,
+    "configs": [
+      {
+        "config_label": "tight_step",
+        "gen_type": "lsb",
+        "config": {
+          "gen_type": "lsb",
+          "strategy": "skip",
+          "capacity_ratio": 0.4,
+          "edge_threshold": 95,
+          "bit_depth": 1,
+          "step": 2,
+          "message": null
+        },
+        "n_pairs": 297,
+        "auc": 0.9941,
+        "eer": 0.037,
+        "eer_threshold": 0.55,
+        "optimal_threshold": 0.56,
+        "youden_j": 0.9293,
+        "acc_at_optimal": 96.46,
+        "tpr_at_optimal": 0.963,
+        "fpr_at_optimal": 0.0337,
+        "acc_at_0.5": 95.12,
+        "tpr_at_0.5": 0.9764,
+        "fpr_at_0.5": 0.0741
+      },
+      {
+        "config_label": "mid_step",
+        "gen_type": "lsb",
+        "config": {
+          "gen_type": "lsb",
+          "strategy": "skip",
+          "capacity_ratio": 0.56,
+          "edge_threshold": 95,
+          "bit_depth": 1,
+          "step": 3,
+          "message": null
+        },
+        "n_pairs": 295,
+        "auc": 0.9961,
+        "eer": 0.0407,
+        "eer_threshold": 0.575,
+        "optimal_threshold": 0.59,
+        "youden_j": 0.9254,
+        "acc_at_optimal": 96.27,
+        "tpr_at_optimal": 0.9593,
+        "fpr_at_optimal": 0.0339,
+        "acc_at_0.5": 95.93,
+        "tpr_at_0.5": 0.9898,
+        "fpr_at_0.5": 0.0712
+      },
+      {
+        "config_label": "large_step",
+        "gen_type": "lsb",
+        "config": {
+          "gen_type": "lsb",
+          "strategy": "skip",
+          "capacity_ratio": 0.7,
+          "edge_threshold": 95,
+          "bit_depth": 1,
+          "step": 7,
+          "message": null
+        },
+        "n_pairs": 299,
+        "auc": 0.9897,
+        "eer": 0.0569,
+        "eer_threshold": 0.52,
+        "optimal_threshold": 0.51,
+        "youden_j": 0.8896,
+        "acc_at_optimal": 94.48,
+        "tpr_at_optimal": 0.9532,
+        "fpr_at_optimal": 0.0635,
+        "acc_at_0.5": 93.65,
+        "tpr_at_0.5": 0.9632,
+        "fpr_at_0.5": 0.0903
+      }
+    ]
   },
-  "edge": {
-    "n_pairs": 497,
-    "auc": 0.8973,
-    "eer": 0.2032,
-    "eer_threshold": 0.275,
-    "optimal_threshold": 0.16,
-    "youden_j": 0.6197,
-    "acc_at_optimal": 80.99,
-    "tpr_at_optimal": 0.8672,
-    "fpr_at_optimal": 0.2475,
-    "acc_at_0.5": 77.77,
-    "tpr_at_0.5": 0.662,
-    "fpr_at_0.5": 0.1066
+  "lsb_edge": {
+    "gen_type": "lsb",
+    "mean_auc": 0.9597,
+    "min_auc": 0.9254,
+    "max_auc": 0.9902,
+    "configs": [
+      {
+        "config_label": "hard",
+        "gen_type": "lsb",
+        "config": {
+          "gen_type": "lsb",
+          "strategy": "edge",
+          "capacity_ratio": 0.21,
+          "edge_threshold": 9,
+          "bit_depth": 1,
+          "step": 1,
+          "message": null
+        },
+        "n_pairs": 297,
+        "auc": 0.9254,
+        "eer": 0.1801,
+        "eer_threshold": 0.395,
+        "optimal_threshold": 0.47,
+        "youden_j": 0.6667,
+        "acc_at_optimal": 83.33,
+        "tpr_at_optimal": 0.7643,
+        "fpr_at_optimal": 0.0976,
+        "acc_at_0.5": 82.15,
+        "tpr_at_0.5": 0.734,
+        "fpr_at_0.5": 0.0909
+      },
+      {
+        "config_label": "medium",
+        "gen_type": "lsb",
+        "config": {
+          "gen_type": "lsb",
+          "strategy": "edge",
+          "capacity_ratio": 0.35,
+          "edge_threshold": 15,
+          "bit_depth": 1,
+          "step": 1,
+          "message": null
+        },
+        "n_pairs": 296,
+        "auc": 0.9634,
+        "eer": 0.0963,
+        "eer_threshold": 0.475,
+        "optimal_threshold": 0.48,
+        "youden_j": 0.8142,
+        "acc_at_optimal": 90.71,
+        "tpr_at_optimal": 0.902,
+        "fpr_at_optimal": 0.0878,
+        "acc_at_0.5": 90.03,
+        "tpr_at_0.5": 0.8784,
+        "fpr_at_0.5": 0.0777
+      },
+      {
+        "config_label": "easy",
+        "gen_type": "lsb",
+        "config": {
+          "gen_type": "lsb",
+          "strategy": "edge",
+          "capacity_ratio": 0.5,
+          "edge_threshold": 30,
+          "bit_depth": 1,
+          "step": 1,
+          "message": null
+        },
+        "n_pairs": 297,
+        "auc": 0.9902,
+        "eer": 0.0572,
+        "eer_threshold": 0.57,
+        "optimal_threshold": 0.625,
+        "youden_j": 0.8956,
+        "acc_at_optimal": 94.78,
+        "tpr_at_optimal": 0.9394,
+        "fpr_at_optimal": 0.0438,
+        "acc_at_0.5": 93.27,
+        "tpr_at_0.5": 0.9798,
+        "fpr_at_0.5": 0.1145
+      }
+    ]
+  },
+  "dct_mid": {
+    "gen_type": "dct",
+    "mean_auc": 0.9943,
+    "min_auc": 0.9896,
+    "max_auc": 0.9972,
+    "configs": [
+      {
+        "config_label": "low_strength",
+        "gen_type": "dct",
+        "config": {
+          "gen_type": "dct",
+          "coeff_selection": "mid",
+          "strength": 1.5,
+          "capacity_ratio": 0.5
+        },
+        "n_pairs": 294,
+        "auc": 0.9896,
+        "eer": 0.0544,
+        "eer_threshold": 0.62,
+        "optimal_threshold": 0.545,
+        "youden_j": 0.8946,
+        "acc_at_optimal": 94.73,
+        "tpr_at_optimal": 0.9796,
+        "fpr_at_optimal": 0.085,
+        "acc_at_0.5": 93.71,
+        "tpr_at_0.5": 0.9898,
+        "fpr_at_0.5": 0.1156
+      },
+      {
+        "config_label": "mid_strength",
+        "gen_type": "dct",
+        "config": {
+          "gen_type": "dct",
+          "coeff_selection": "mid",
+          "strength": 3.0,
+          "capacity_ratio": 0.5
+        },
+        "n_pairs": 299,
+        "auc": 0.9972,
+        "eer": 0.0301,
+        "eer_threshold": 0.59,
+        "optimal_threshold": 0.545,
+        "youden_j": 0.9532,
+        "acc_at_optimal": 97.66,
+        "tpr_at_optimal": 0.9866,
+        "fpr_at_optimal": 0.0334,
+        "acc_at_0.5": 96.32,
+        "tpr_at_0.5": 0.9933,
+        "fpr_at_0.5": 0.0669
+      },
+      {
+        "config_label": "high_strength",
+        "gen_type": "dct",
+        "config": {
+          "gen_type": "dct",
+          "coeff_selection": "mid",
+          "strength": 6.0,
+          "capacity_ratio": 0.5
+        },
+        "n_pairs": 296,
+        "auc": 0.996,
+        "eer": 0.0372,
+        "eer_threshold": 0.595,
+        "optimal_threshold": 0.6,
+        "youden_j": 0.9324,
+        "acc_at_optimal": 96.62,
+        "tpr_at_optimal": 0.9628,
+        "fpr_at_optimal": 0.0304,
+        "acc_at_0.5": 95.1,
+        "tpr_at_0.5": 0.9932,
+        "fpr_at_0.5": 0.0912
+      }
+    ]
+  },
+  "dct_low_mid": {
+    "gen_type": "dct",
+    "mean_auc": 0.9889,
+    "min_auc": 0.9826,
+    "max_auc": 0.9944,
+    "configs": [
+      {
+        "config_label": "low_strength",
+        "gen_type": "dct",
+        "config": {
+          "gen_type": "dct",
+          "coeff_selection": "low_mid",
+          "strength": 2.0,
+          "capacity_ratio": 0.4
+        },
+        "n_pairs": 299,
+        "auc": 0.9826,
+        "eer": 0.0686,
+        "eer_threshold": 0.485,
+        "optimal_threshold": 0.475,
+        "youden_j": 0.8763,
+        "acc_at_optimal": 93.81,
+        "tpr_at_optimal": 0.9465,
+        "fpr_at_optimal": 0.0702,
+        "acc_at_0.5": 92.64,
+        "tpr_at_0.5": 0.9097,
+        "fpr_at_0.5": 0.0569
+      },
+      {
+        "config_label": "mid_strength",
+        "gen_type": "dct",
+        "config": {
+          "gen_type": "dct",
+          "coeff_selection": "low_mid",
+          "strength": 3.0,
+          "capacity_ratio": 0.4
+        },
+        "n_pairs": 298,
+        "auc": 0.9898,
+        "eer": 0.057,
+        "eer_threshold": 0.54,
+        "optimal_threshold": 0.615,
+        "youden_j": 0.8893,
+        "acc_at_optimal": 94.46,
+        "tpr_at_optimal": 0.9128,
+        "fpr_at_optimal": 0.0235,
+        "acc_at_0.5": 93.29,
+        "tpr_at_0.5": 0.9497,
+        "fpr_at_0.5": 0.0839
+      },
+      {
+        "config_label": "high_strength",
+        "gen_type": "dct",
+        "config": {
+          "gen_type": "dct",
+          "coeff_selection": "low_mid",
+          "strength": 5.0,
+          "capacity_ratio": 0.4
+        },
+        "n_pairs": 298,
+        "auc": 0.9944,
+        "eer": 0.0436,
+        "eer_threshold": 0.53,
+        "optimal_threshold": 0.57,
+        "youden_j": 0.9161,
+        "acc_at_optimal": 95.81,
+        "tpr_at_optimal": 0.943,
+        "fpr_at_optimal": 0.0268,
+        "acc_at_0.5": 95.3,
+        "tpr_at_0.5": 0.9765,
+        "fpr_at_0.5": 0.0705
+      }
+    ]
+  },
+  "fft_low": {
+    "gen_type": "fft",
+    "mean_auc": 0.9625,
+    "min_auc": 0.9316,
+    "max_auc": 0.9795,
+    "configs": [
+      {
+        "config_label": "low_strength",
+        "gen_type": "fft",
+        "config": {
+          "gen_type": "fft",
+          "freq_band": "low",
+          "strength": 5.0,
+          "capacity_ratio": 0.5
+        },
+        "n_pairs": 297,
+        "auc": 0.9316,
+        "eer": 0.1667,
+        "eer_threshold": 0.435,
+        "optimal_threshold": 0.305,
+        "youden_j": 0.6835,
+        "acc_at_optimal": 84.18,
+        "tpr_at_optimal": 0.9226,
+        "fpr_at_optimal": 0.2391,
+        "acc_at_0.5": 82.32,
+        "tpr_at_0.5": 0.7576,
+        "fpr_at_0.5": 0.1111
+      },
+      {
+        "config_label": "mid_strength",
+        "gen_type": "fft",
+        "config": {
+          "gen_type": "fft",
+          "freq_band": "low",
+          "strength": 10.0,
+          "capacity_ratio": 0.35
+        },
+        "n_pairs": 298,
+        "auc": 0.9795,
+        "eer": 0.0805,
+        "eer_threshold": 0.49,
+        "optimal_threshold": 0.49,
+        "youden_j": 0.8389,
+        "acc_at_optimal": 91.95,
+        "tpr_at_optimal": 0.9228,
+        "fpr_at_optimal": 0.0839,
+        "acc_at_0.5": 91.28,
+        "tpr_at_0.5": 0.9027,
+        "fpr_at_0.5": 0.0772
+      },
+      {
+        "config_label": "high_strength",
+        "gen_type": "fft",
+        "config": {
+          "gen_type": "fft",
+          "freq_band": "low",
+          "strength": 15.0,
+          "capacity_ratio": 0.25
+        },
+        "n_pairs": 298,
+        "auc": 0.9765,
+        "eer": 0.0956,
+        "eer_threshold": 0.51,
+        "optimal_threshold": 0.485,
+        "youden_j": 0.8188,
+        "acc_at_optimal": 90.94,
+        "tpr_at_optimal": 0.9262,
+        "fpr_at_optimal": 0.1074,
+        "acc_at_0.5": 90.77,
+        "tpr_at_0.5": 0.9161,
+        "fpr_at_0.5": 0.1007
+      }
+    ]
+  },
+  "fft_mid": {
+    "gen_type": "fft",
+    "mean_auc": 0.9845,
+    "min_auc": 0.9813,
+    "max_auc": 0.9874,
+    "configs": [
+      {
+        "config_label": "low_strength",
+        "gen_type": "fft",
+        "config": {
+          "gen_type": "fft",
+          "freq_band": "mid",
+          "strength": 4.0,
+          "capacity_ratio": 0.3
+        },
+        "n_pairs": 299,
+        "auc": 0.9874,
+        "eer": 0.0569,
+        "eer_threshold": 0.53,
+        "optimal_threshold": 0.53,
+        "youden_j": 0.8863,
+        "acc_at_optimal": 94.31,
+        "tpr_at_optimal": 0.9431,
+        "fpr_at_optimal": 0.0569,
+        "acc_at_0.5": 93.31,
+        "tpr_at_0.5": 0.9532,
+        "fpr_at_0.5": 0.087
+      },
+      {
+        "config_label": "mid_strength",
+        "gen_type": "fft",
+        "config": {
+          "gen_type": "fft",
+          "freq_band": "mid",
+          "strength": 8.0,
+          "capacity_ratio": 0.3
+        },
+        "n_pairs": 297,
+        "auc": 0.9847,
+        "eer": 0.0707,
+        "eer_threshold": 0.535,
+        "optimal_threshold": 0.525,
+        "youden_j": 0.8687,
+        "acc_at_optimal": 93.43,
+        "tpr_at_optimal": 0.9394,
+        "fpr_at_optimal": 0.0707,
+        "acc_at_0.5": 92.59,
+        "tpr_at_0.5": 0.9461,
+        "fpr_at_0.5": 0.0943
+      },
+      {
+        "config_label": "high_strength",
+        "gen_type": "fft",
+        "config": {
+          "gen_type": "fft",
+          "freq_band": "mid",
+          "strength": 14.0,
+          "capacity_ratio": 0.3
+        },
+        "n_pairs": 298,
+        "auc": 0.9813,
+        "eer": 0.0688,
+        "eer_threshold": 0.55,
+        "optimal_threshold": 0.55,
+        "youden_j": 0.8624,
+        "acc_at_optimal": 93.12,
+        "tpr_at_optimal": 0.9295,
+        "fpr_at_optimal": 0.0671,
+        "acc_at_0.5": 91.95,
+        "tpr_at_0.5": 0.9396,
+        "fpr_at_0.5": 0.1007
+      }
+    ]
+  },
+  "fft_high": {
+    "gen_type": "fft",
+    "mean_auc": 0.9791,
+    "min_auc": 0.9604,
+    "max_auc": 0.9926,
+    "configs": [
+      {
+        "config_label": "low_strength",
+        "gen_type": "fft",
+        "config": {
+          "gen_type": "fft",
+          "freq_band": "high",
+          "strength": 3.0,
+          "capacity_ratio": 0.25
+        },
+        "n_pairs": 297,
+        "auc": 0.9926,
+        "eer": 0.0438,
+        "eer_threshold": 0.58,
+        "optimal_threshold": 0.59,
+        "youden_j": 0.9158,
+        "acc_at_optimal": 95.79,
+        "tpr_at_optimal": 0.9562,
+        "fpr_at_optimal": 0.0404,
+        "acc_at_0.5": 94.78,
+        "tpr_at_0.5": 0.9899,
+        "fpr_at_0.5": 0.0943
+      },
+      {
+        "config_label": "mid_strength",
+        "gen_type": "fft",
+        "config": {
+          "gen_type": "fft",
+          "freq_band": "high",
+          "strength": 6.0,
+          "capacity_ratio": 0.25
+        },
+        "n_pairs": 299,
+        "auc": 0.9843,
+        "eer": 0.0468,
+        "eer_threshold": 0.565,
+        "optimal_threshold": 0.565,
+        "youden_j": 0.9064,
+        "acc_at_optimal": 95.32,
+        "tpr_at_optimal": 0.9532,
+        "fpr_at_optimal": 0.0468,
+        "acc_at_0.5": 93.14,
+        "tpr_at_0.5": 0.9799,
+        "fpr_at_0.5": 0.1171
+      },
+      {
+        "config_label": "high_strength",
+        "gen_type": "fft",
+        "config": {
+          "gen_type": "fft",
+          "freq_band": "high",
+          "strength": 10.0,
+          "capacity_ratio": 0.25
+        },
+        "n_pairs": 298,
+        "auc": 0.9604,
+        "eer": 0.0906,
+        "eer_threshold": 0.48,
+        "optimal_threshold": 0.43,
+        "youden_j": 0.8691,
+        "acc_at_optimal": 93.46,
+        "tpr_at_optimal": 1.0,
+        "fpr_at_optimal": 0.1309,
+        "acc_at_0.5": 88.42,
+        "tpr_at_0.5": 0.849,
+        "fpr_at_0.5": 0.0805
+      }
+    ]
   }
 }

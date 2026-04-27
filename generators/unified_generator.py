@@ -1,21 +1,26 @@
-import random
 from generators.lsb_gen import LSBGenerator
-# from generators.dct_gen import DCTGenerator
+from generators.dct_gen import DCTGenerator
+from generators.fft_gen import FFTGenerator
 
 
 class UnifiedGenerator:
     """
-    Central hub for all generators.
+    Central hub for all steganography generators.
 
-    generate_stego() now accepts a file path (str), PIL.Image, or np.ndarray
-    as cover_input, so callers no longer need to write a temporary file to disk
-    before calling this method.
+    Supported gen_type values:
+        'lsb'  — Spatial LSB embedding  (LSBGenerator)
+        'dct'  — Block DCT embedding     (DCTGenerator)
+        'fft'  — Global FFT embedding    (FFTGenerator)
+
+    generate_stego() accepts a file path (str), PIL.Image, or np.ndarray as
+    cover_input, so callers never need to write a temporary file to disk.
     """
 
     def __init__(self):
         self.generators = {
             'lsb': LSBGenerator(),
-            # 'dct': DCTGenerator(),
+            'dct': DCTGenerator(),
+            'fft': FFTGenerator(),
         }
 
     def generate_stego(self, cover_input, output_path, config):
@@ -27,11 +32,15 @@ class UnifiedGenerator:
             output_path:  Destination path for the stego image, or None to skip
                           saving to disk (recommended during training).
             config:       Dictionary containing 'gen_type' and generator parameters.
+
+        Returns:
+            (stego_array, metric) — numpy array + PSNR float, or (None, 0) on failure.
         """
         gen_type = config.get('gen_type', 'lsb')
 
         if gen_type in self.generators:
             return self.generators[gen_type].run(cover_input, output_path, **config)
 
-        print(f"Unknown generator type: {gen_type}")
+        print(f"[UnifiedGenerator] Unknown generator type: '{gen_type}'. "
+              f"Available: {list(self.generators.keys())}")
         return None, 0
