@@ -106,7 +106,7 @@ class SRNet(nn.Module):
 
         out_a = self.bn_a(self.branch_a(spatial))
         out_b = self.bn_b(self.branch_b(spatial))
-        out_c = self.bn_c(self.branch_c(freq))
+        out_c = torch.abs(self.bn_c(self.branch_c(freq)))
 
         # Merge isolated domain features into 85-channel map
         x = self.relu(torch.cat([out_a, out_b, out_c], dim=1))

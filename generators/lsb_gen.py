@@ -99,7 +99,11 @@ class LSBGenerator(BaseGenerator):
                 else np.arange(total_pixels)
             )
             if len(candidate_indices) < target_pixels:
-                candidate_indices = np.arange(total_pixels)
+                img_f = img_array.astype(float)
+                dx = np.diff(img_f, axis=1, append=0)
+                dy = np.diff(img_f, axis=0, append=0)
+                flat_mag = np.sqrt(dx ** 2 + dy ** 2).flatten()
+                candidate_indices = np.argpartition(flat_mag, -target_pixels)[-target_pixels:]
             chosen_indices = np.random.choice(candidate_indices, target_pixels, replace=False)
 
         elif strategy == 'random':
