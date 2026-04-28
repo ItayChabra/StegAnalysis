@@ -19,9 +19,15 @@ FROZEN BACKBONE OPTION (first N epochs)
     classification head adapts to the new examples. Prevents the most
     aggressive forgetting.
 
-LEARNING RATE
-    Max LR 1e-5 (10× lower than the previous finetune attempt).
-    Cosine decay from epoch 0 — no warm-up needed since weights are pretrained.
+LEARNING RATE — TWO-PHASE COSINE
+    Phase 1 (backbone frozen): cosine from FT_MAX_LR → FT_MIN_LR over
+    FREEZE_BACKBONE_EPOCHS epochs. Head-only updates can tolerate higher LR.
+
+    Phase 2 (backbone unfrozen): fresh cosine cycle starting from FT_MAX_LR_FULL
+    (lower ceiling) → FT_MIN_LR over the remaining epochs. Opening the backbone
+    into a high LR causes the val-acc dip seen when using a single shared cycle —
+    the model only stabilises around epoch 9 when the LR has decayed far enough.
+    Two independent cycles eliminate this wasted window.
 
 Usage
 -----
@@ -57,17 +63,18 @@ from training.validate import run_validation
 import training.config as cfg
 
 torch.backends.cuda.matmul.allow_tf32 = True
-torch.backends.cudnn.allow_tf32       = True
-cudnn.benchmark                       = True
+torch.backends.cudnn.allow_tf32 = True
+cudnn.benchmark = True
 
 # ── Fine-tune hyperparameters ─────────────────────────────────────────────────
 
-FT_EPOCHS      = 20
-FT_MAX_LR      = 1e-5     # 50× lower than training MAX_LR
-FT_MIN_LR      = 1e-7
-FT_BATCH_SIZE  = 64
+FT_EPOCHS = 20
+FT_MAX_LR = 1e-5  # Phase 1 (head-only): high LR is safe, backbone frozen
+FT_MAX_LR_FULL = 3e-6  # Phase 2 (full model): lower ceiling protects backbone
+FT_MIN_LR = 1e-7  # Floor for both phases
+FT_BATCH_SIZE = 64
 FT_ACCUM_STEPS = 2
-FT_WORKERS     = max(1, cfg.NUM_WORKERS)
+FT_WORKERS = max(1, cfg.NUM_WORKERS)
 
 # Freeze the residual backbone for this many epochs, adapting only the head.
 # Set to 0 to fine-tune all layers from the start.
@@ -85,15 +92,15 @@ DEFAULT_CHECKPOINT = 'srnet_best_val.pth'
 # MIN_AUC_FROM_EVAL below and the menu rebuilds automatically.
 
 MIN_AUC_FROM_EVAL = {
-    'lsb_sequential': 0.958,
-    'lsb_random':     0.980,
-    'lsb_skip':       0.938,
-    'lsb_edge':       0.877,
-    'dct_mid':        0.935,
-    'dct_low_mid':    0.821,
-    'fft_low':        0.706,
-    'fft_mid':        0.924,
-    'fft_high':       0.948,
+    "lsb_sequential": 0.958,
+    "lsb_random": 0.9942,
+    "lsb_skip": 0.9896,
+    "lsb_edge": 0.9117,
+    "dct_mid": 0.9822,
+    "dct_low_mid": 0.9761,
+    "fft_low": 0.9142,
+    "fft_mid": 0.9829,
+    "fft_high": 0.9864
 }
 
 # Reference configs — one representative per strategy (the hard / low-strength one).
@@ -101,28 +108,28 @@ _STRATEGY_CONFIGS = [
     # ── LSB ──────────────────────────────────────────────────────────────────
     ('lsb_sequential', {'gen_type': 'lsb', 'strategy': 'sequential',
                         'capacity_ratio': 0.25, 'bit_depth': 1, 'step': 1}),
-    ('lsb_random',     {'gen_type': 'lsb', 'strategy': 'random',
-                        'capacity_ratio': 0.25, 'bit_depth': 1}),
-    ('lsb_skip',       {'gen_type': 'lsb', 'strategy': 'skip',
-                        'capacity_ratio': 0.40, 'bit_depth': 1, 'step': 7,
-                        'edge_threshold': 95}),
-    ('lsb_edge',       {'gen_type': 'lsb', 'strategy': 'edge',
-                        'capacity_ratio': 0.21, 'bit_depth': 1,
-                        'edge_threshold': 9}),
+    ('lsb_random', {'gen_type': 'lsb', 'strategy': 'random',
+                    'capacity_ratio': 0.25, 'bit_depth': 1}),
+    ('lsb_skip', {'gen_type': 'lsb', 'strategy': 'skip',
+                  'capacity_ratio': 0.40, 'bit_depth': 1, 'step': 7,
+                  'edge_threshold': 95}),
+    ('lsb_edge', {'gen_type': 'lsb', 'strategy': 'edge',
+                  'capacity_ratio': 0.21, 'bit_depth': 1,
+                  'edge_threshold': 9}),
 
     # ── DCT ──────────────────────────────────────────────────────────────────
-    ('dct_mid',        {'gen_type': 'dct', 'coeff_selection': 'mid',
-                        'strength': 1.5, 'capacity_ratio': 0.50}),
-    ('dct_low_mid',    {'gen_type': 'dct', 'coeff_selection': 'low_mid',
-                        'strength': 2.0, 'capacity_ratio': 0.40}),
+    ('dct_mid', {'gen_type': 'dct', 'coeff_selection': 'mid',
+                 'strength': 1.5, 'capacity_ratio': 0.50}),
+    ('dct_low_mid', {'gen_type': 'dct', 'coeff_selection': 'low_mid',
+                     'strength': 2.0, 'capacity_ratio': 0.40}),
 
     # ── FFT ──────────────────────────────────────────────────────────────────
-    ('fft_low',        {'gen_type': 'fft', 'freq_band': 'low',
-                        'strength': 5.0, 'capacity_ratio': 0.50}),
-    ('fft_mid',        {'gen_type': 'fft', 'freq_band': 'mid',
-                        'strength': 4.0, 'capacity_ratio': 0.30}),
-    ('fft_high',       {'gen_type': 'fft', 'freq_band': 'high',
-                        'strength': 3.0, 'capacity_ratio': 0.25}),
+    ('fft_low', {'gen_type': 'fft', 'freq_band': 'low',
+                 'strength': 5.0, 'capacity_ratio': 0.50}),
+    ('fft_mid', {'gen_type': 'fft', 'freq_band': 'mid',
+                 'strength': 4.0, 'capacity_ratio': 0.30}),
+    ('fft_high', {'gen_type': 'fft', 'freq_band': 'high',
+                  'strength': 3.0, 'capacity_ratio': 0.25}),
 ]
 
 
@@ -134,12 +141,12 @@ def _build_sampler():
     names, configs, weights = [], [], []
     for name, config in _STRATEGY_CONFIGS:
         min_auc = MIN_AUC_FROM_EVAL.get(name, 0.90)
-        w       = max(0.02, 1.0 - min_auc)
+        w = max(0.02, 1.0 - min_auc)
         names.append(name)
         configs.append(config)
         weights.append(w)
 
-    total   = sum(weights)
+    total = sum(weights)
     weights = [w / total for w in weights]
 
     print("[SAMPLER] Strategy weights:")
@@ -153,8 +160,26 @@ def _build_sampler():
 # ── LR schedule ───────────────────────────────────────────────────────────────
 
 def _cosine_lr(optimizer, epoch, total_epochs):
-    progress = epoch / max(1, total_epochs - 1)
-    lr = FT_MIN_LR + 0.5 * (FT_MAX_LR - FT_MIN_LR) * (1 + math.cos(math.pi * progress))
+    UNFREEZE_WARMUP = 2
+
+    if epoch < FREEZE_BACKBONE_EPOCHS:
+        phase_len = max(1, FREEZE_BACKBONE_EPOCHS)
+        progress = epoch / max(1, phase_len - 1) if phase_len > 1 else 1.0
+        lr = FT_MIN_LR + 0.5 * (FT_MAX_LR - FT_MIN_LR) * (1 + math.cos(math.pi * progress))
+
+    else:
+        phase_epoch = epoch - FREEZE_BACKBONE_EPOCHS
+        phase_len = max(1, total_epochs - FREEZE_BACKBONE_EPOCHS)
+
+        if phase_epoch < UNFREEZE_WARMUP:
+            ramp_progress = (phase_epoch + 1) / UNFREEZE_WARMUP
+            lr = FT_MIN_LR + ramp_progress * (FT_MAX_LR_FULL - FT_MIN_LR)
+        else:
+            cosine_epoch = phase_epoch - UNFREEZE_WARMUP
+            cosine_len = max(1, phase_len - UNFREEZE_WARMUP)
+            progress = cosine_epoch / max(1, cosine_len - 1) if cosine_len > 1 else 1.0
+            lr = FT_MIN_LR + 0.5 * (FT_MAX_LR_FULL - FT_MIN_LR) * (1 + math.cos(math.pi * progress))
+
     for pg in optimizer.param_groups:
         pg['lr'] = lr
     return lr
@@ -212,30 +237,33 @@ def _generate_pair(args):
         return cover_t, stego_t
 
     except Exception as e:
-        print(f"\n[GEN ERROR] {config.get('gen_type','?')}: {e}")
+        print(f"\n[GEN ERROR] {config.get('gen_type', '?')}: {e}")
         return None
-
 
 # ── Main fine-tuning loop ─────────────────────────────────────────────────────
 
 def run_finetune(checkpoint_path: str, epochs: int):
+    phase2_lr_str = f"{FT_MAX_LR_FULL:.0e} → {FT_MIN_LR:.0e}"
     print(f"\n{'=' * 65}")
     print("  FINE-TUNING RUN (fixed weighted sampler — no EA)")
     print(f"  Base checkpoint : {checkpoint_path}")
-    print(f"  LR range        : {FT_MIN_LR:.0e} → {FT_MAX_LR:.0e}")
+    print(f"  LR phase 1      : {FT_MAX_LR:.0e} → {FT_MIN_LR:.0e}  (head only, {FREEZE_BACKBONE_EPOCHS} epochs)")
+    print(f"  LR phase 2      : {phase2_lr_str}  (full model, {epochs - FREEZE_BACKBONE_EPOCHS} epochs)")
     print(f"  Freeze backbone : first {FREEZE_BACKBONE_EPOCHS} epochs")
     print(f"  Epochs          : {epochs}")
     print('=' * 65)
 
     # ── Data ──────────────────────────────────────────────────────────────────
     lossy_files, lossless_files = load_balanced_dataset('data/raw')
-    split      = create_or_load_split(lossy_files, lossless_files)
+    split = create_or_load_split(lossy_files, lossless_files)
     train_files = split['lossy_train'] + split['lossless_train']
-    val_lossy   = split['lossy_val']
+    val_lossy = split['lossy_val']
     val_lossless = split['lossless_val']
 
     print(f"\n[DATA] Train pool: {len(train_files)} images")
     print(f"[DATA] Val pool:   {len(val_lossy) + len(val_lossless)} images")
+
+    strategy_names, strategy_configs, strategy_weights = _build_sampler()
 
     # ── Model ─────────────────────────────────────────────────────────────────
     model = SRNet().to(cfg.DEVICE)
@@ -245,33 +273,32 @@ def run_finetune(checkpoint_path: str, epochs: int):
         print(f"[ERROR] Checkpoint not found: {checkpoint_path}")
         sys.exit(1)
 
-    ckpt       = torch.load(checkpoint_path, map_location=cfg.DEVICE, weights_only=False)
+    ckpt = torch.load(checkpoint_path, map_location=cfg.DEVICE, weights_only=False)
     state_dict = ckpt.get('model_state_dict', ckpt)
     state_dict = {k.replace('_orig_mod.', ''): v for k, v in state_dict.items()}
-    raw_model  = model._orig_mod if hasattr(model, '_orig_mod') else model
+    raw_model = model._orig_mod if hasattr(model, '_orig_mod') else model
     raw_model.load_state_dict(state_dict)
+
     base_val_acc = ckpt.get('val_acc', 0.0)
     print(f"[RESUME] Loaded checkpoint — base val_acc: {base_val_acc:.2f}%")
 
     optimizer = optim.Adam(model.parameters(), lr=FT_MAX_LR, weight_decay=2e-4)
     criterion = nn.CrossEntropyLoss(reduction='none', label_smoothing=0.1)
-    scaler    = torch.amp.GradScaler('cuda')
+    scaler = torch.amp.GradScaler('cuda')
 
     unified_gen = UnifiedGenerator()
-    to_tensor   = transforms.ToTensor()
-
-    strategy_names, strategy_configs, strategy_weights = _build_sampler()
+    to_tensor = transforms.ToTensor()
 
     steps_per_epoch = max(1, len(train_files) // FT_BATCH_SIZE)
-    best_val_acc    = base_val_acc
-    best_val_epoch  = 0
+    best_val_acc = base_val_acc
+    best_val_epoch = 0
 
     history = {'epoch': [], 'train_acc': [], 'val_acc': [], 'lr': [], 'strategy_counts': []}
 
     for epoch in range(epochs):
         lr = _cosine_lr(optimizer, epoch, epochs)
 
-        # Freeze or unfreeze backbone
+        # Freeze or unfreeze backbone at phase boundary
         if epoch == 0 and FREEZE_BACKBONE_EPOCHS > 0:
             _set_backbone_frozen(model, frozen=True)
         elif epoch == FREEZE_BACKBONE_EPOCHS:
@@ -283,8 +310,8 @@ def run_finetune(checkpoint_path: str, epochs: int):
 
         random.shuffle(train_files)
 
-        total_loss    = 0.0
-        correct       = 0
+        total_loss = 0.0
+        correct = 0
         total_samples = 0
         strategy_counts = {n: 0 for n in strategy_names}
 
@@ -293,9 +320,8 @@ def run_finetune(checkpoint_path: str, epochs: int):
 
         with ThreadPoolExecutor(max_workers=FT_WORKERS) as executor:
             for step in range(steps_per_epoch):
-                # Sample this batch's strategies from the weighted menu
-                batch_paths    = train_files[step * FT_BATCH_SIZE:
-                                             (step + 1) * FT_BATCH_SIZE]
+                batch_paths = train_files[step * FT_BATCH_SIZE:
+                                          (step + 1) * FT_BATCH_SIZE]
                 chosen_indices = random.choices(
                     range(len(strategy_configs)),
                     weights=strategy_weights,
@@ -306,7 +332,6 @@ def run_finetune(checkpoint_path: str, epochs: int):
                     for path, idx in zip(batch_paths, chosen_indices)
                 ]
 
-                # Track strategy usage
                 for idx in chosen_indices:
                     strategy_counts[strategy_names[idx]] += 1
 
@@ -324,14 +349,14 @@ def run_finetune(checkpoint_path: str, epochs: int):
                 inputs_t = torch.stack(inputs).to(cfg.DEVICE, non_blocking=True)
                 labels_t = torch.tensor(labels, dtype=torch.long).to(cfg.DEVICE)
 
-                perm      = torch.randperm(inputs_t.size(0))
-                inputs_t  = inputs_t[perm]
-                labels_t  = labels_t[perm]
+                perm = torch.randperm(inputs_t.size(0))
+                inputs_t = inputs_t[perm]
+                labels_t = labels_t[perm]
 
                 with torch.amp.autocast('cuda'):
-                    outputs  = model(inputs_t)
+                    outputs = model(inputs_t)
                     per_loss = criterion(outputs, labels_t)
-                    loss     = per_loss.mean() / FT_ACCUM_STEPS
+                    loss = per_loss.mean() / FT_ACCUM_STEPS
 
                 scaler.scale(loss).backward()
 
@@ -342,9 +367,9 @@ def run_finetune(checkpoint_path: str, epochs: int):
                     scaler.update()
                     optimizer.zero_grad()
 
-                _, preds  = torch.max(outputs, 1)
-                total_loss    += loss.item() * FT_ACCUM_STEPS
-                correct       += (preds == labels_t).sum().item()
+                _, preds = torch.max(outputs, 1)
+                total_loss += loss.item() * FT_ACCUM_STEPS
+                correct += (preds == labels_t).sum().item()
                 total_samples += labels_t.size(0)
 
                 if step % 20 == 0:
@@ -363,15 +388,13 @@ def run_finetune(checkpoint_path: str, epochs: int):
         torch.cuda.empty_cache()
 
         train_acc = 100 * correct / max(1, total_samples)
-
-        # Strategy usage summary
         total_used = sum(strategy_counts.values())
+
         print(f"\n[SAMPLER] Batch usage this epoch (total={total_used}):")
         for n, c in sorted(strategy_counts.items(), key=lambda x: -x[1]):
             pct = 100 * c / max(1, total_used)
             print(f"  {n:<20} {c:>5}  ({pct:.1f}%)")
 
-        # Validation
         print("[VAL] Running validation...")
         val_loss, val_acc = run_validation(
             model, val_lossy, val_lossless, unified_gen, criterion, epoch)
@@ -379,7 +402,7 @@ def run_finetune(checkpoint_path: str, epochs: int):
               f"(base: {base_val_acc:.2f}%  delta: {val_acc - base_val_acc:+.2f}%)")
 
         if val_acc > best_val_acc:
-            best_val_acc   = val_acc
+            best_val_acc = val_acc
             best_val_epoch = epoch + 1
             save_checkpoint(epoch + 1, model, optimizer,
                             {}, val_acc, 'srnet_finetuned_best.pth')
@@ -394,7 +417,6 @@ def run_finetune(checkpoint_path: str, epochs: int):
         history['lr'].append(lr)
         history['strategy_counts'].append(strategy_counts)
 
-        # Save periodic checkpoint every 5 epochs
         if (epoch + 1) % 5 == 0:
             save_checkpoint(epoch + 1, model, optimizer, {},
                             val_acc, f'srnet_ft_epoch_{epoch + 1}.pth')
