@@ -10,6 +10,7 @@ from torchvision import transforms
 
 from generators.unified_generator import UnifiedGenerator
 from training.config import (
+    ADAPTIVE_MODES,
     ALL_GEN_TYPES,
     DCT_COEFF_MODES,
     DEVICE,
@@ -130,6 +131,15 @@ def _sample_val_config(rng: random.Random) -> dict:
             'coeff_selection': rng.choice(DCT_COEFF_MODES),
             'strength':        rng.uniform(1.0, 8.0),
             'capacity_ratio':  rng.uniform(MIN_CAPACITY, MAX_CAPACITY),
+        }
+    if gen_type == 'adaptive':
+        return {
+            'gen_type':       'adaptive',
+            'adaptive_mode':  rng.choice(ADAPTIVE_MODES),
+            'capacity_ratio': rng.uniform(MIN_CAPACITY, MAX_CAPACITY),
+            'sigma_offset':   rng.uniform(0.5, 5.0),
+            'use_diagonal':   rng.choice([True, False]),
+            'cost_exponent':  rng.uniform(0.5, 2.0),
         }
     # fft
     return {

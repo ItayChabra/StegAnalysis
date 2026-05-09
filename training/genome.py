@@ -44,6 +44,8 @@ def get_niche(genome: dict) -> str:
         return f"lsb_{genome.get('strategy', 'random')}"
     if gt == 'fft':
         return f"fft_{genome.get('freq_band', 'mid')}"
+    if gt == 'adaptive':
+        return f"adaptive_{genome.get('adaptive_mode', 'wow')}"
     return 'dct'
 
 

@@ -1,0 +1,13 @@
+.dashboard {
+  margin-top: 32px;
+  padding-bottom: 8px;
+}
+
+/* Subtle divider above the dashboard when it first appears */
+.dashboard::before {
+  content: '';
+  display: block;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent);
+  margin-bottom: 28px;
+}

@@ -15,7 +15,7 @@ KEY CHANGE vs previous version:
   For a security application, MIN AUC is the operative number — it tells you
   the worst-case operating point a real attacker could exploit.
 
-Evaluates strategies: 4 LSB + 2 DCT + 3 FFT (including fft_low variants).
+Evaluates strategies: 4 LSB + 2 DCT + 3 FFT + 3 Adaptive (WOW / S-UNIWARD / HUGO).
 
 Outputs:
   - Per-strategy mean/min AUC table printed to console
@@ -143,6 +143,33 @@ STRATEGY_CONFIGS = {
         {'label': 'low_strength',  'gen_type': 'fft', 'freq_band': 'high', 'strength': 3.0, 'capacity_ratio': 0.25},
         {'label': 'mid_strength',  'gen_type': 'fft', 'freq_band': 'high', 'strength': 6.0, 'capacity_ratio': 0.25},  # reference
         {'label': 'high_strength', 'gen_type': 'fft', 'freq_band': 'high', 'strength': 10.0,'capacity_ratio': 0.25},
+    ],
+
+    # ── Adaptive Spatial Stego ────────────────────────────────────────────────
+    # Three difficulty tiers per algorithm:
+    #   low_cap  — small payload, very low distortion (hardest to detect)
+    #   mid_cap  — reference point matching finetune _STRATEGY_CONFIGS
+    #   high_cap — larger payload, more distortion (easier to detect)
+    #
+    # sigma_offset: higher = smoother cost surface = easier to detect.
+    # cost_exponent: higher = more concentrated embedding in texture.
+
+    'adaptive_wow': [
+        {'label': 'low_cap',  'gen_type': 'adaptive', 'adaptive_mode': 'wow', 'capacity_ratio': 0.20, 'sigma_offset': 0.5, 'cost_exponent': 1.2, 'use_diagonal': True},
+        {'label': 'mid_cap',  'gen_type': 'adaptive', 'adaptive_mode': 'wow', 'capacity_ratio': 0.30, 'sigma_offset': 0.5, 'cost_exponent': 1.2, 'use_diagonal': True},  # reference
+        {'label': 'high_cap', 'gen_type': 'adaptive', 'adaptive_mode': 'wow', 'capacity_ratio': 0.50, 'sigma_offset': 1.0, 'cost_exponent': 1.0, 'use_diagonal': True},
+    ],
+
+    'adaptive_suniward': [
+        {'label': 'low_cap',  'gen_type': 'adaptive', 'adaptive_mode': 'suniward', 'capacity_ratio': 0.20, 'sigma_offset': 0.5, 'cost_exponent': 1.2, 'use_diagonal': True},
+        {'label': 'mid_cap',  'gen_type': 'adaptive', 'adaptive_mode': 'suniward', 'capacity_ratio': 0.30, 'sigma_offset': 0.5, 'cost_exponent': 1.2, 'use_diagonal': True},  # reference
+        {'label': 'high_cap', 'gen_type': 'adaptive', 'adaptive_mode': 'suniward', 'capacity_ratio': 0.50, 'sigma_offset': 1.0, 'cost_exponent': 1.0, 'use_diagonal': True},
+    ],
+
+    'adaptive_hugo': [
+        {'label': 'low_cap',  'gen_type': 'adaptive', 'adaptive_mode': 'hugo', 'capacity_ratio': 0.25, 'sigma_offset': 1.0, 'cost_exponent': 1.0, 'use_diagonal': True},
+        {'label': 'mid_cap',  'gen_type': 'adaptive', 'adaptive_mode': 'hugo', 'capacity_ratio': 0.40, 'sigma_offset': 1.0, 'cost_exponent': 1.0, 'use_diagonal': True},  # reference
+        {'label': 'high_cap', 'gen_type': 'adaptive', 'adaptive_mode': 'hugo', 'capacity_ratio': 0.55, 'sigma_offset': 2.0, 'cost_exponent': 0.8, 'use_diagonal': True},
     ],
 }
 
@@ -338,15 +365,16 @@ def save_roc_plot(all_strategy_roc, output_path):
         matplotlib.use('Agg')
         import matplotlib.pyplot as plt
 
-        fig, axes = plt.subplots(1, 3, figsize=(21, 7))
+        fig, axes = plt.subplots(1, 4, figsize=(28, 7))
         fig.suptitle('ROC Curves — Per Strategy, Reference Config (held-out test set)',
                      fontsize=14)
         palette = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12',
                    '#9b59b6', '#1abc9c', '#e67e22', '#34495e', '#c0392b']
         groups  = {
-            'LSB Strategies': [k for k in all_strategy_roc if k.startswith('lsb_')],
-            'DCT Variants':   [k for k in all_strategy_roc if k.startswith('dct_')],
-            'FFT Variants':   [k for k in all_strategy_roc if k.startswith('fft_')],
+            'LSB Strategies':      [k for k in all_strategy_roc if k.startswith('lsb_')],
+            'DCT Variants':        [k for k in all_strategy_roc if k.startswith('dct_')],
+            'FFT Variants':        [k for k in all_strategy_roc if k.startswith('fft_')],
+            'Adaptive (WOW/S-UNI/HUGO)': [k for k in all_strategy_roc if k.startswith('adaptive_')],
         }
         for ax, (title, keys) in zip(axes, groups.items()):
             for i, key in enumerate(keys):
@@ -378,7 +406,7 @@ def run_evaluation(model_path, split_file, output_dir, images_per_config):
     os.makedirs(output_dir, exist_ok=True)
 
     print("\n" + "=" * 75)
-    print("        STEGANALYSIS EVALUATION  (multi-config, LSB + DCT + FFT)")
+    print("   STEGANALYSIS EVALUATION  (multi-config, LSB + DCT + FFT + Adaptive)")
     print("=" * 75)
     print(f"  Images per config variant: {images_per_config}")
     print(f"  Configs per strategy:      3  (low / mid[reference] / high)")

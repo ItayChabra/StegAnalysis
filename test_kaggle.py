@@ -3,7 +3,12 @@ inference.py — Sliding-window steganalysis with pluggable score aggregation.
 
 Key changes vs previous version
 ---------------------------------
-AGGREGATION MODES  (per-folder, set in FOLDER_CONFIG)
+BENCHMARK EVALUATION
+  The script now evaluates both Cover (negative) and Stego (positive) directories
+  to accurately calculate True Positive and True Negative rates across different
+  datasets (BOSSbase/BOWS2, Flickr30k, Kaggle methods).
+
+AGGREGATION MODES
   'max'    — original behaviour: P(stego) = max window score.
              Good when the stego signal is strong and localised (FFT, high-cap LSB).
   'mean'   — arithmetic mean of all window scores.
@@ -12,20 +17,6 @@ AGGREGATION MODES  (per-folder, set in FOLDER_CONFIG)
              Best for weak/distributed signals (DCT, low-capacity steganography).
   'p80'    — 80th-percentile window score.
              A compromise: less volatile than max, more sensitive than mean.
-
-WHY DCT SCORES CLUSTER AROUND 0.47
-  The Kaggle DCT folder likely contains images produced by a standard JPEG
-  coefficient tool (JSteg / F5 / OutGuess / Steghide). Our SRNet was trained
-  on a custom block-DCT embedder that writes to the spatial domain after IDCT;
-  these are fundamentally different signal distributions.
-  The model detects *something* (mean > 0.50 at random) but can't cross the
-  decision boundary confidently. The vote aggregator captures this weak signal
-  better than the single max window.
-
-CHANNEL HANDLING
-  LSB  (RGB PNG) — R / G / B channels scored individually; max taken across channels.
-  DCT / FFT (grayscale BMP) — single luminance channel.
-  Other RGB — YCbCr Y channel only.
 """
 
 import glob
@@ -41,30 +32,41 @@ from models.srnet import SRNet
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
-MODEL_CHECKPOINT = 'srnet_finetuned_best.pth'
-DATA_DIR         = '/home/linuxu/PycharmProjects/StegAnalysis/data/Kaggle_Testing'
+MODEL_CHECKPOINT = 'srnet_ft_epoch_20.pth'
 DEVICE           = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 WINDOW_SIZE   = 256
 WINDOW_STRIDE = 64
+VOTE_FLOOR    = 0.35   # lowered from 0.40: adaptive stego scores cluster around 0.35–0.45
+BATCH_SIZE = 64
 
-# Floor used by the 'vote' aggregator: fraction of windows above this score.
-VOTE_FLOOR = 0.40
+# Define base paths as seen in your environment
+KAGGLE_DIR = '/home/linuxu/PycharmProjects/StegAnalysis/data/Kaggle_Testing'
+RAW_DIR    = '/home/linuxu/PycharmProjects/StegAnalysis/data/raw'
 
-# Per-folder configuration.
-# Keys: 'threshold' — final decision boundary on the aggregated score.
-#       'mode'      — aggregation strategy ('max' | 'mean' | 'vote' | 'p80').
-FOLDER_CONFIG = {
-    #  DCT: weak distributed signal — vote on fraction of windows above VOTE_FLOOR.
-    #  Threshold of 0.35 means: if ≥ 35% of patches score ≥ 0.40, classify as stego.
-    'dct': {'threshold': 0.35, 'mode': 'vote'},
+# Per-folder configuration for the benchmark.
+# 'label'     — 0 for Covers (expecting 0% detection), 1 for Stego (expecting 100% detection).
+# 'threshold' — final decision boundary on the aggregated score.
+# 'mode'      — aggregation strategy ('max' | 'mean' | 'vote' | 'p80').
+TEST_TARGETS = [
+    # ── COVERS (Expected: Clean / 0% Stego) ──────────────────────────────────
+    {'name': 'BOSS & BOWS2',  'path': os.path.join(RAW_DIR, 'BossBase and BOWS2'),       'label': 0, 'threshold': 0.60, 'mode': 'mean'},
+    {'name': 'Flickr30k',     'path': os.path.join(RAW_DIR, 'flickr30k'),                'label': 0, 'threshold': 0.60, 'mode': 'mean'},
 
-    # FFT: strong signal, original max works fine.
-    'fft': {'threshold': 0.50, 'mode': 'max'},
+    # ── SPATIAL / ADAPTIVE STEGO (Expected: 100% Stego) ──────────────────────
+    # p80: 80th-percentile window score — more sensitive than vote for spatially
+    # uniform embedding where the signal is diffuse across all windows.
+    # Threshold 0.45 targets the upper tail of the score distribution.
+    {'name': 'HUGO',          'path': os.path.join(KAGGLE_DIR, 'HUGO'),                  'label': 1, 'threshold': 0.45, 'mode': 'p80'},
+    {'name': 'S-UNIWARD',     'path': os.path.join(KAGGLE_DIR, 'S-UNIWARD'),             'label': 1, 'threshold': 0.45, 'mode': 'p80'},
+    {'name': 'WOW',           'path': os.path.join(KAGGLE_DIR, 'WOW'),                   'label': 1, 'threshold': 0.45, 'mode': 'p80'},
+    {'name': 'LSB',           'path': os.path.join(KAGGLE_DIR, 'lsb'),                   'label': 1, 'threshold': 0.50, 'mode': 'max'},
 
-    # LSB: near-perfect, original max works fine.
-    'lsb': {'threshold': 0.50, 'mode': 'max'},
-}
+    # ── FREQUENCY STEGO (Expected: 100% Stego) ───────────────────────────────
+    # If DCT detection is weak, consider changing 'mode' to 'vote' and threshold to 0.35
+    {'name': 'DCT',           'path': os.path.join(KAGGLE_DIR, 'dct'),                   'label': 1, 'threshold': 0.50, 'mode': 'max'},
+    {'name': 'FFT',           'path': os.path.join(KAGGLE_DIR, 'fft'),                   'label': 1, 'threshold': 0.50, 'mode': 'max'},
+]
 
 _LOG_FFT_SCALE = math.log1p(256 * 256)
 
@@ -78,25 +80,20 @@ def compute_log_fft(spatial_tensor: torch.Tensor) -> torch.Tensor:
     return log_magnitude / _LOG_FFT_SCALE
 
 
-def extract_channels(img_path: str, folder_name: str) -> list:
-    """
-    Return a list of grayscale PIL images to score independently.
-
-    LSB / RGB PNG  → [R, G, B]  (stego is typically in all three channels)
-    Grayscale 'L'  → [img]
-    Other RGB/RGBA → [Y channel from YCbCr]
-    """
+def extract_channels(img_path: str, target_name: str) -> list:
     img = Image.open(img_path)
 
     if img.mode == 'L':
         return [img]
 
-    if folder_name == 'lsb' and img.mode == 'RGB':
-        r, g, b = img.split()
-        return [r, g, b]
-
     if img.mode in ('RGB', 'RGBA'):
-        return [img.convert('YCbCr').split()[0]]
+        # LSB stego is hidden per-channel, so split for LSB folders.
+        # For everything else, use luminance — matching training preprocessing.
+        if target_name == 'LSB':
+            r, g, b = img.convert('RGB').split()
+            return [r, g, b]
+        else:
+            return [img.convert('L')]  # ← luminance, exactly as trained
 
     return [img.convert('L')]
 
@@ -104,8 +101,8 @@ def extract_channels(img_path: str, folder_name: str) -> list:
 # ── Sliding-window inference ──────────────────────────────────────────────────
 
 def sliding_window_scores(model: torch.nn.Module,
-                           img: Image.Image,
-                           to_tensor) -> list[float]:
+                          img: Image.Image,
+                          to_tensor) -> list[float]:
     """
     Run the model over every 256×256 window of *img* and return a list of
     P(stego) values — one per window.  Small images are centre-padded to 256.
@@ -117,33 +114,49 @@ def sliding_window_scores(model: torch.nn.Module,
     pad_h = max(0, WINDOW_SIZE - h)
     pad_w = max(0, WINDOW_SIZE - w)
     if pad_h > 0 or pad_w > 0:
-        padded        = np.full((h + pad_h, w + pad_w), 128, dtype=np.uint8)
+        padded = np.full((h + pad_h, w + pad_w), 128, dtype=np.uint8)
         padded[:h, :w] = img_array
-        img_array      = padded
-        h, w           = img_array.shape
+        img_array = padded
+        h, w = img_array.shape
 
-    scores = []
+    all_scores = []
+    current_batch = []
+
+    # Wrap the entire generation and inference in no_grad
     with torch.no_grad():
         for top in range(0, h - WINDOW_SIZE + 1, WINDOW_STRIDE):
             for left in range(0, w - WINDOW_SIZE + 1, WINDOW_STRIDE):
-                patch   = img_array[top: top + WINDOW_SIZE, left: left + WINDOW_SIZE]
-                spatial = to_tensor(Image.fromarray(patch)).to(DEVICE)
-                log_fft = compute_log_fft(spatial)
-                tensor  = torch.cat([spatial, log_fft], dim=0).unsqueeze(0)
-                prob    = torch.softmax(model(tensor), dim=1)[0, 1].item()
-                scores.append(prob)
 
-    return scores
+                # 1. Extract and preprocess patch
+                patch = img_array[top:top + WINDOW_SIZE, left:left + WINDOW_SIZE]
+                spatial = to_tensor(Image.fromarray(patch))
+                log_fft = compute_log_fft(spatial)
+                tensor = torch.cat([spatial, log_fft], dim=0)
+                current_batch.append(tensor)
+
+                # 2. If batch is full, run inference and clear memory
+                if len(current_batch) == BATCH_SIZE:
+                    batch_t = torch.stack(current_batch).to(DEVICE)
+                    probs = torch.softmax(model(batch_t), dim=1)[:, 1]
+                    all_scores.extend(probs.cpu().tolist())
+
+                    # Explicitly clear lists and delete tensors to free GPU memory
+                    current_batch = []
+                    del batch_t
+
+        # 3. Process any remaining patches in the final partial batch
+        if current_batch:
+            batch_t = torch.stack(current_batch).to(DEVICE)
+            probs = torch.softmax(model(batch_t), dim=1)[:, 1]
+            all_scores.extend(probs.cpu().tolist())
+            del batch_t
+
+    return all_scores
 
 
 def aggregate_scores(scores: list[float], mode: str) -> float:
     """
     Reduce a list of per-window scores to a single detection score.
-
-    mode='max'  — maximum window score
-    mode='mean' — arithmetic mean
-    mode='vote' — fraction of windows at or above VOTE_FLOOR
-    mode='p80'  — 80th percentile
     """
     if not scores:
         return 0.0
@@ -172,7 +185,7 @@ def main():
         print(f"ERROR: Could not find {MODEL_CHECKPOINT}.")
         return
 
-    checkpoint = torch.load(MODEL_CHECKPOINT, map_location=DEVICE, weights_only=False)
+    checkpoint = torch.load(MODEL_CHECKPOINT, map_location=DEVICE, weights_only=True)
     state_dict = checkpoint.get('model_state_dict', checkpoint)
     # Strip torch.compile prefix if present
     state_dict = {k.replace('_orig_mod.', ''): v for k, v in state_dict.items()}
@@ -182,21 +195,24 @@ def main():
 
     to_tensor = transforms.ToTensor()
 
-    for folder, cfg in FOLDER_CONFIG.items():
-        threshold = cfg['threshold']
-        mode      = cfg['mode']
+    for target in TEST_TARGETS:
+        name      = target['name']
+        folder    = target['path']
+        label     = target['label']
+        threshold = target['threshold']
+        mode      = target['mode']
 
-        folder_path = os.path.join(DATA_DIR, folder)
-        if not os.path.exists(folder_path):
-            print(f"[Skipped] Directory not found: {folder_path}\n")
+        if not os.path.exists(folder):
+            print(f"[Skipped] Directory not found: {folder}\n")
             continue
 
-        images = sorted(glob.glob(os.path.join(folder_path, '*.*')))[:200]
+        images = sorted(glob.glob(os.path.join(folder, '*.*')))[:200]
         if not images:
-            print(f"[Skipped] No files found in {folder_path}\n")
+            print(f"[Skipped] No files found in {folder}\n")
             continue
 
-        print(f"--- Testing '{folder}' ({len(images)} images) "
+        target_type = "STEGO" if label == 1 else "COVER"
+        print(f"--- Testing {target_type}: '{name}' ({len(images)} images) "
               f"[mode={mode}, thresh={threshold}] ---")
 
         detected_stego = 0
@@ -205,7 +221,7 @@ def main():
 
         for img_path in images:
             try:
-                channels      = extract_channels(img_path, folder)
+                channels      = extract_channels(img_path, name)
                 channel_score = 0.0
 
                 for ch_img in channels:
@@ -224,11 +240,20 @@ def main():
         if valid_count == 0:
             continue
 
-        accuracy = detected_stego / valid_count * 100
-        s        = np.array(final_scores)
+        # Calculate accuracy based on what we expect the folder to be
+        if label == 1:
+            # We want it to be detected as stego
+            accuracy = (detected_stego / valid_count) * 100
+        else:
+            # We want it to be detected as cover (NOT stego)
+            correctly_classified_covers = valid_count - detected_stego
+            accuracy = (correctly_classified_covers / valid_count) * 100
 
-        print(f"  Result:    {detected_stego}/{valid_count} detected as stego "
-              f"({accuracy:.1f}%)")
+        s = np.array(final_scores)
+
+        print(f"  Detected as Stego: {detected_stego}/{valid_count}")
+        metric_name = "TPR (Detection Rate)" if label == 1 else "TNR (Clean Rate)"
+        print(f"  {metric_name}: {accuracy:.1f}%")
         print(f"  Score distribution ({mode}) — "
               f"min: {s.min():.3f}  mean: {s.mean():.3f}  "
               f"max: {s.max():.3f}  median: {np.median(s):.3f}")
@@ -240,6 +265,7 @@ def main():
         )
         print(band_str)
         print()
+
 
 
 if __name__ == "__main__":

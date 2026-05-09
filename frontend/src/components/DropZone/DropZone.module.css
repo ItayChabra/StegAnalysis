@@ -1,0 +1,243 @@
+/* ── Zone container ── */
+.zone {
+  position: relative;
+  min-height: 220px;
+  border: 1.5px dashed rgba(255, 255, 255, 0.09);
+  border-radius: 14px;
+  background: linear-gradient(160deg, var(--bg-surface) 0%, var(--bg-base) 100%);
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  margin-top: 24px;
+  padding: 36px 24px;
+  transition:
+    border-color 200ms ease,
+    background 200ms ease,
+    box-shadow 200ms ease;
+}
+
+.zone:hover:not(.disabled):not(.hasFile) {
+  border-color: rgba(59, 130, 246, 0.35);
+  box-shadow:
+    0 6px 32px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(59, 130, 246, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.zone.dragOver {
+  border-color: var(--accent);
+  border-style: solid;
+  background: linear-gradient(160deg, var(--bg-elevated) 0%, var(--bg-surface) 100%);
+  box-shadow:
+    0 0 0 1px rgba(59, 130, 246, 0.4),
+    0 0 40px rgba(59, 130, 246, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.zone.hasFile {
+  border-style: solid;
+  border-width: 1px;
+  border-color: rgba(255, 255, 255, 0.07);
+  cursor: default;
+  background: linear-gradient(160deg, var(--bg-surface) 0%, var(--bg-base) 100%);
+}
+
+.zone.disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+/* ── Empty state — CSS upload icon ── */
+.uploadIcon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 40px;
+  margin-bottom: 18px;
+  opacity: 0.55;
+  transition: opacity 200ms ease;
+}
+
+.zone:hover .uploadIcon {
+  opacity: 0.75;
+}
+
+.arrowHead {
+  width: 0;
+  height: 0;
+  border-left: 10px solid transparent;
+  border-right: 10px solid transparent;
+  border-bottom: 12px solid var(--text-secondary);
+}
+
+.arrowShaft {
+  width: 4px;
+  height: 10px;
+  background: var(--text-secondary);
+}
+
+.uploadTray {
+  width: 32px;
+  height: 4px;
+  background: var(--text-secondary);
+  border-radius: 2px;
+  margin-top: 4px;
+}
+
+.hint {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 15px;
+  color: var(--text-secondary);
+  margin: 0 0 6px;
+  letter-spacing: 0.01em;
+}
+
+.formats {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-secondary);
+  opacity: 0.6;
+  margin: 0;
+  letter-spacing: 0.04em;
+}
+
+/* ── File selected state ── */
+.preview {
+  height: 160px;
+  max-width: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+  display: block;
+  margin-bottom: 14px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+/* PGM placeholder */
+.pgmPlaceholder {
+  height: 160px;
+  width: 200px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: linear-gradient(145deg, var(--bg-elevated) 0%, var(--bg-surface) 100%);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.pgmIcon {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pgmBar {
+  height: 6px;
+  border-radius: 2px;
+}
+
+.pgmBar:nth-child(1) { width: 40px; background: var(--text-secondary); opacity: 0.85; }
+.pgmBar:nth-child(2) { width: 40px; background: var(--text-secondary); opacity: 0.45; }
+.pgmBar:nth-child(3) { width: 40px; background: var(--text-secondary); opacity: 0.18; }
+
+.pgmLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin: 0;
+  letter-spacing: 0.06em;
+  opacity: 0.7;
+}
+
+.filename {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--text-secondary);
+  max-width: 280px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  margin-bottom: 18px;
+  letter-spacing: 0.02em;
+  opacity: 0.75;
+}
+
+/* ── Analyze button ── */
+.analyzeBtn {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 15px;
+  font-weight: 500;
+  color: #ffffff;
+  background: var(--accent);
+  border: none;
+  border-radius: 8px;
+  padding: 11px 32px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  letter-spacing: 0.01em;
+  box-shadow:
+    0 2px 8px rgba(59, 130, 246, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  transition:
+    transform 150ms ease,
+    filter 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.analyzeBtn:hover:not(:disabled) {
+  filter: brightness(1.12);
+  transform: scale(1.02);
+  box-shadow:
+    0 4px 20px rgba(59, 130, 246, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.analyzeBtn:active:not(:disabled) {
+  transform: scale(0.99);
+  filter: brightness(0.97);
+}
+
+.analyzeBtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  box-shadow: none;
+}
+
+/* ── CSS spinner ── */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: #ffffff;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+/* ── Inline validation error ── */
+.errorMsg {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  color: var(--verdict-alert);
+  margin-top: 12px;
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
+.fileInput {
+  display: none;
+}

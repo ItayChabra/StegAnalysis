@@ -80,6 +80,11 @@ FT_WORKERS = max(1, cfg.NUM_WORKERS)
 # Set to 0 to fine-tune all layers from the start.
 FREEZE_BACKBONE_EPOCHS = 4
 
+# Recommended epoch count when running --adaptive-focus.
+# 35 epochs with full backbone and 80 % adaptive batch share is enough for
+# the model to build a new decision boundary without catastrophic forgetting.
+ADAPTIVE_FOCUS_EPOCHS = 35
+
 DEFAULT_CHECKPOINT = 'srnet_best_val.pth'
 
 # ── Weighted strategy menu ────────────────────────────────────────────────────
@@ -92,15 +97,18 @@ DEFAULT_CHECKPOINT = 'srnet_best_val.pth'
 # MIN_AUC_FROM_EVAL below and the menu rebuilds automatically.
 
 MIN_AUC_FROM_EVAL = {
-    "lsb_sequential": 0.958,
-    "lsb_random": 0.9942,
-    "lsb_skip": 0.9896,
-    "lsb_edge": 0.9117,
-    "dct_mid": 0.9822,
-    "dct_low_mid": 0.9761,
-    "fft_low": 0.9142,
-    "fft_mid": 0.9829,
-    "fft_high": 0.9864
+    "lsb_sequential": 0.9501,
+    "lsb_random": 0.9921,
+    "lsb_skip": 0.9718,
+    "lsb_edge": 0.8676,
+    "dct_mid": 0.9352,
+    "dct_low_mid": 0.8684,
+    "fft_low": 0.7917,
+    "fft_mid": 0.9686,
+    "fft_high": 0.6965,
+    "adaptive_wow": 0.9645,
+    "adaptive_suniward": 0.9599,
+    "adaptive_hugo": 0.9477
 }
 
 # Reference configs — one representative per strategy (the hard / low-strength one).
@@ -130,6 +138,17 @@ _STRATEGY_CONFIGS = [
                  'strength': 4.0, 'capacity_ratio': 0.30}),
     ('fft_high', {'gen_type': 'fft', 'freq_band': 'high',
                   'strength': 3.0, 'capacity_ratio': 0.25}),
+
+    # ── Adaptive (hard variants: low sigma_offset = sharper cost map) ─────────
+    ('adaptive_wow', {'gen_type': 'adaptive', 'adaptive_mode': 'wow',
+                      'sigma_offset': 0.5, 'capacity_ratio': 0.30,
+                      'cost_exponent': 1.2, 'use_diagonal': True}),
+    ('adaptive_suniward', {'gen_type': 'adaptive', 'adaptive_mode': 'suniward',
+                           'sigma_offset': 0.5, 'capacity_ratio': 0.30,
+                           'cost_exponent': 1.2, 'use_diagonal': True}),
+    ('adaptive_hugo', {'gen_type': 'adaptive', 'adaptive_mode': 'hugo',
+                       'sigma_offset': 1.0, 'capacity_ratio': 0.40,
+                       'cost_exponent': 1.0, 'use_diagonal': True}),
 ]
 
 
@@ -157,28 +176,65 @@ def _build_sampler():
     return names, configs, weights
 
 
+def _build_adaptive_sampler():
+    """
+    Adaptive-focus variant: ~80 % of each batch goes to adaptive strategies.
+
+    Adaptive notional AUC = 0.50  →  weight 0.50 each (model knows nothing yet).
+    The two hardest non-adaptive weak spots keep weight ~0.10 to prevent
+    catastrophic forgetting of previously learned strategies.
+    Everything else gets the minimum floor (0.02) so they still appear rarely.
+    """
+    # Notional AUC values for this pass: lower = more batch share
+    _auc_overrides = {
+        'adaptive_wow': 0.50,  # → w = 0.50
+        'adaptive_suniward': 0.50,  # → w = 0.50
+        'adaptive_hugo': 0.50,  # → w = 0.50
+        'lsb_edge': 0.90,  # → w = 0.10  (hardest existing weak spot)
+        'fft_low': 0.90,  # → w = 0.10  (second hardest)
+    }
+
+    names, configs, weights = [], [], []
+    for name, config in _STRATEGY_CONFIGS:
+        auc = _auc_overrides.get(name, 0.99)  # 0.99 → floor 0.02
+        w = max(0.02, 1.0 - auc)
+        names.append(name)
+        configs.append(config)
+        weights.append(w)
+
+    total = sum(weights)
+    weights = [w / total for w in weights]
+
+    print("[SAMPLER/ADAPTIVE-FOCUS] Strategy weights:")
+    for n, w in zip(names, weights):
+        bar = '█' * int(w * 40)
+        print(f"  {n:<20} {w:.3f}  {bar}")
+
+    return names, configs, weights
+
+
 # ── LR schedule ───────────────────────────────────────────────────────────────
 
-def _cosine_lr(optimizer, epoch, total_epochs):
+def _cosine_lr(optimizer, epoch, total_epochs, freeze_epochs=FREEZE_BACKBONE_EPOCHS,
+               phase2_max_lr=FT_MAX_LR_FULL):
     UNFREEZE_WARMUP = 2
 
-    if epoch < FREEZE_BACKBONE_EPOCHS:
-        phase_len = max(1, FREEZE_BACKBONE_EPOCHS)
+    if epoch < freeze_epochs:
+        phase_len = max(1, freeze_epochs)
         progress = epoch / max(1, phase_len - 1) if phase_len > 1 else 1.0
         lr = FT_MIN_LR + 0.5 * (FT_MAX_LR - FT_MIN_LR) * (1 + math.cos(math.pi * progress))
-
     else:
-        phase_epoch = epoch - FREEZE_BACKBONE_EPOCHS
-        phase_len = max(1, total_epochs - FREEZE_BACKBONE_EPOCHS)
+        phase_epoch = epoch - freeze_epochs
+        phase_len = max(1, total_epochs - freeze_epochs)
 
         if phase_epoch < UNFREEZE_WARMUP:
             ramp_progress = (phase_epoch + 1) / UNFREEZE_WARMUP
-            lr = FT_MIN_LR + ramp_progress * (FT_MAX_LR_FULL - FT_MIN_LR)
+            lr = FT_MIN_LR + ramp_progress * (phase2_max_lr - FT_MIN_LR)
         else:
             cosine_epoch = phase_epoch - UNFREEZE_WARMUP
             cosine_len = max(1, phase_len - UNFREEZE_WARMUP)
             progress = cosine_epoch / max(1, cosine_len - 1) if cosine_len > 1 else 1.0
-            lr = FT_MIN_LR + 0.5 * (FT_MAX_LR_FULL - FT_MIN_LR) * (1 + math.cos(math.pi * progress))
+            lr = FT_MIN_LR + 0.5 * (phase2_max_lr - FT_MIN_LR) * (1 + math.cos(math.pi * progress))
 
     for pg in optimizer.param_groups:
         pg['lr'] = lr
@@ -240,17 +296,39 @@ def _generate_pair(args):
         print(f"\n[GEN ERROR] {config.get('gen_type', '?')}: {e}")
         return None
 
+
 # ── Main fine-tuning loop ─────────────────────────────────────────────────────
 
-def run_finetune(checkpoint_path: str, epochs: int):
-    phase2_lr_str = f"{FT_MAX_LR_FULL:.0e} → {FT_MIN_LR:.0e}"
+def run_finetune(checkpoint_path: str, epochs: int, adaptive_focus: bool = False):
+    # ── Mode-dependent settings ────────────────────────────────────────────────
+    if adaptive_focus:
+        freeze_epochs = 0  # train everything from epoch 0
+        phase2_max_lr = 5e-6  # slightly higher ceiling for fast adaptation
+        save_name = 'srnet_adaptive_best.pth'
+        history_name = 'finetune_adaptive_history.json'
+        sampler_fn = _build_adaptive_sampler
+        mode_label = "ADAPTIVE-FOCUS"
+    else:
+        freeze_epochs = FREEZE_BACKBONE_EPOCHS
+        phase2_max_lr = FT_MAX_LR_FULL
+        save_name = 'srnet_finetuned_best.pth'
+        history_name = 'finetune_history.json'
+        sampler_fn = _build_sampler
+        mode_label = "STANDARD"
+
+    phase2_lr_str = f"{phase2_max_lr:.0e} → {FT_MIN_LR:.0e}"
     print(f"\n{'=' * 65}")
-    print("  FINE-TUNING RUN (fixed weighted sampler — no EA)")
+    print(f"  FINE-TUNING RUN [{mode_label}] (fixed weighted sampler — no EA)")
     print(f"  Base checkpoint : {checkpoint_path}")
-    print(f"  LR phase 1      : {FT_MAX_LR:.0e} → {FT_MIN_LR:.0e}  (head only, {FREEZE_BACKBONE_EPOCHS} epochs)")
-    print(f"  LR phase 2      : {phase2_lr_str}  (full model, {epochs - FREEZE_BACKBONE_EPOCHS} epochs)")
-    print(f"  Freeze backbone : first {FREEZE_BACKBONE_EPOCHS} epochs")
+    if freeze_epochs > 0:
+        print(f"  LR phase 1      : {FT_MAX_LR:.0e} → {FT_MIN_LR:.0e}  (head only, {freeze_epochs} epochs)")
+        print(f"  LR phase 2      : {phase2_lr_str}  (full model, {epochs - freeze_epochs} epochs)")
+        print(f"  Freeze backbone : first {freeze_epochs} epochs")
+    else:
+        print(f"  LR              : {phase2_max_lr:.0e} → {FT_MIN_LR:.0e}  (full model from epoch 0)")
+        print(f"  Freeze backbone : disabled")
     print(f"  Epochs          : {epochs}")
+    print(f"  Output          : {save_name}")
     print('=' * 65)
 
     # ── Data ──────────────────────────────────────────────────────────────────
@@ -263,11 +341,11 @@ def run_finetune(checkpoint_path: str, epochs: int):
     print(f"\n[DATA] Train pool: {len(train_files)} images")
     print(f"[DATA] Val pool:   {len(val_lossy) + len(val_lossless)} images")
 
-    strategy_names, strategy_configs, strategy_weights = _build_sampler()
+    strategy_names, strategy_configs, strategy_weights = sampler_fn()
 
     # ── Model ─────────────────────────────────────────────────────────────────
     model = SRNet().to(cfg.DEVICE)
-    model = torch.compile(model, mode='reduce-overhead')
+    model = torch.compile(model, mode='default')
 
     if not os.path.exists(checkpoint_path):
         print(f"[ERROR] Checkpoint not found: {checkpoint_path}")
@@ -296,12 +374,13 @@ def run_finetune(checkpoint_path: str, epochs: int):
     history = {'epoch': [], 'train_acc': [], 'val_acc': [], 'lr': [], 'strategy_counts': []}
 
     for epoch in range(epochs):
-        lr = _cosine_lr(optimizer, epoch, epochs)
+        lr = _cosine_lr(optimizer, epoch, epochs,
+                        freeze_epochs=freeze_epochs, phase2_max_lr=phase2_max_lr)
 
         # Freeze or unfreeze backbone at phase boundary
-        if epoch == 0 and FREEZE_BACKBONE_EPOCHS > 0:
+        if epoch == 0 and freeze_epochs > 0:
             _set_backbone_frozen(model, frozen=True)
-        elif epoch == FREEZE_BACKBONE_EPOCHS:
+        elif epoch == freeze_epochs and freeze_epochs > 0:
             _set_backbone_frozen(model, frozen=False)
 
         print(f"\n{'=' * 65}")
@@ -405,8 +484,8 @@ def run_finetune(checkpoint_path: str, epochs: int):
             best_val_acc = val_acc
             best_val_epoch = epoch + 1
             save_checkpoint(epoch + 1, model, optimizer,
-                            {}, val_acc, 'srnet_finetuned_best.pth')
-            print(f"[VAL] *** New best: {best_val_acc:.2f}% ***")
+                            {}, val_acc, save_name)
+            print(f"[VAL] *** New best: {best_val_acc:.2f}% → {save_name} ***")
 
         print(f"[EPOCH] Train: {train_acc:.2f}%  |  Val: {val_acc:.2f}%  |  "
               f"LR: {lr:.2e}")
@@ -422,11 +501,11 @@ def run_finetune(checkpoint_path: str, epochs: int):
                             val_acc, f'srnet_ft_epoch_{epoch + 1}.pth')
 
     print(f"\n[DONE] Best val accuracy: {best_val_acc:.2f}% at epoch {best_val_epoch}")
-    print("[DONE] Best model saved as: srnet_finetuned_best.pth")
+    print(f"[DONE] Best model saved as: {save_name}")
 
-    with open('finetune_history.json', 'w') as f:
+    with open(history_name, 'w') as f:
         json.dump(history, f, indent=2)
-    print("[DONE] History saved to finetune_history.json")
+    print(f"[DONE] History saved to {history_name}")
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
@@ -435,11 +514,19 @@ def _parse_args():
     p = argparse.ArgumentParser(description="Fine-tune SRNet on weak-spot strategies")
     p.add_argument('--checkpoint', default=DEFAULT_CHECKPOINT,
                    help=f'Checkpoint to resume from (default: {DEFAULT_CHECKPOINT})')
-    p.add_argument('--epochs', type=int, default=FT_EPOCHS,
-                   help=f'Number of fine-tune epochs (default: {FT_EPOCHS})')
+    p.add_argument('--epochs', type=int, default=None,
+                   help=f'Number of epochs (default: {FT_EPOCHS} standard, '
+                        f'{ADAPTIVE_FOCUS_EPOCHS} adaptive-focus)')
+    p.add_argument('--adaptive-focus', action='store_true',
+                   help='Dedicate ~80%% of each batch to adaptive strategies '
+                        '(wow/suniward/hugo) with no backbone freeze. '
+                        f'Recommended: --epochs {ADAPTIVE_FOCUS_EPOCHS}. '
+                        'Saves to srnet_adaptive_best.pth.')
     return p.parse_args()
 
 
 if __name__ == '__main__':
     args = _parse_args()
-    run_finetune(checkpoint_path=args.checkpoint, epochs=args.epochs)
+    epochs = args.epochs or (ADAPTIVE_FOCUS_EPOCHS if args.adaptive_focus else FT_EPOCHS)
+    run_finetune(checkpoint_path=args.checkpoint, epochs=epochs,
+                 adaptive_focus=args.adaptive_focus)

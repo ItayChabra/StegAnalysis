@@ -1,0 +1,15 @@
+# Ignore model weights
+*.pth
+*.pt
+*.onnx
+
+# Ignore datasets and generated stego images
+/data/
+/datasets/
+*.png
+*.jpg
+*.jpeg
+
+# Ignore massive training logs
+*.log
+finetune_history.json

@@ -60,15 +60,16 @@ cudnn.benchmark                       = True
 
 
 def run_training(checkpoint_path='srnet_best_val.pth'):
-    print(f"Starting Hybrid Training Run 13 on {DEVICE}")
-    print("Run 13 changes vs run 12:")
-    print("  Architecture: Triple-branch frontend (SRM + spatial learnable + FFT learnable)")
-    print("  Branch A: 11 frozen SRM filters (spatial only)")
+    print(f"Starting Hybrid Training Run 15 (proper SRM frontend) on {DEVICE}")
+    print("Run 15 changes vs run 14:")
+    print("  Architecture: Triple-branch frontend (30 SRM + 53 spatial + 21 FFT = 104 ch)")
+    print("  Branch A: 30 frozen canonical SRM kernels + TLU (spatial only)")
     print("  Branch B: 53 learnable filters (spatial only — LSB/DCT specialization)")
     print("  Branch C: 21 learnable filters (FFT only — frequency ring specialization)")
+    print("  Adaptive: WOW / S-UNIWARD / HUGO integrated from epoch 0 (Layer 7 batch floor)")
+    print("  Curriculum: capacity override skipped for adaptive (preserves adaptivity profile)")
     print("  Label smoothing: 0.1 (threshold calibration fix)")
-    print(f"  CURRICULUM_END: {CURRICULUM_END}  "
-          f"CURRICULUM_BLEND_EPOCHS: {get_curriculum_blend_factor.__module__}")
+    print(f"  CURRICULUM_END: {CURRICULUM_END}")
 
     # ── Data ──────────────────────────────────────────────────────────────────
     lossy_files, lossless_files = load_balanced_dataset('data/raw')
@@ -189,7 +190,12 @@ def run_training(checkpoint_path='srnet_best_val.pth'):
                         genome_cfg = genome.copy()
                         gt         = genome_cfg['gen_type']
 
-                        if _curriculum:
+                        # Curriculum capacity override: skip for adaptive.
+                        # For LSB/DCT/FFT, high capacity = "easy stego, big signal" (good warmup).
+                        # For adaptive, capacity≈1.0 forces lambda→0, makes p_change≈0.5
+                        # everywhere, and erases the adaptivity profile that defines
+                        # WOW/S-UNIWARD/HUGO. Adaptive keeps its genome capacity (0.30–0.50).
+                        if _curriculum and gt != 'adaptive':
                             genome_cfg['capacity_ratio'] = random.uniform(_min_cap, 1.0)
                             if gt == 'lsb':
                                 genome_cfg['edge_threshold'] = random.randint(0, _max_edge)

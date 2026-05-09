@@ -12,12 +12,24 @@ NICHE SYSTEM
 SEEDING
   Targeted edge seeds, low-cap sequential, fft_low ×4, fft_mid/high ×1 each,
   DCT ×3, skip ×2.
+
+Adaptive integration
+--------------------
+  _new_adaptive() constructor for WOW / S-UNIWARD / HUGO genomes.
+  _seed_population() seeds all six ADAPTIVE_SEED_CONFIGS entries.
+  _generate_random_genome() samples adaptive at GEN_TYPE_WEIGHTS frequency.
+  mutate() / crossover() fully handle adaptive fields.
+  _is_duplicate() compares adaptive_mode + sigma_offset for adaptive genomes.
+  evolve() injection handles adaptive_wow / adaptive_suniward / adaptive_hugo.
+  get_adaptive_genome(mode) samples from the population for batch Layer 7.
 """
 
 import copy
 import random
 
 from training.config import (
+    ADAPTIVE_MODES,
+    ADAPTIVE_SEED_CONFIGS,
     ALL_GEN_TYPES,
     ALL_NICHES,
     CAPACITY_PENALTY_THRESHOLD,
@@ -96,6 +108,12 @@ class EvolutionaryManager:
             g['capacity_ratio'] = capacity
             self.population.append(g)
 
+        # Adaptive: one genome per ADAPTIVE_SEED_CONFIGS entry
+        for mode, sigma_off, cap, exp in ADAPTIVE_SEED_CONFIGS:
+            tag = f"{mode}_s{str(sigma_off).replace('.', 'p')}"
+            self.population.append(
+                self._new_adaptive(f"Seed_adaptive_{tag}", mode, sigma_off, cap, exp))
+
         # Fill remainder with random genomes
         while len(self.population) < POPULATION_SIZE:
             self.population.append(
@@ -145,12 +163,31 @@ class EvolutionaryManager:
                                                 MIN_CAPACITY + 0.15),
         }
 
+    def _new_adaptive(self, name: str, adaptive_mode: str = None,
+                      sigma_offset: float = None, capacity_ratio: float = None,
+                      cost_exponent: float = None) -> dict:
+        return {
+            'name':           name,
+            'gen_type':       'adaptive',
+            'adaptive_mode':  adaptive_mode or random.choice(ADAPTIVE_MODES),
+            'sigma_offset':   (sigma_offset if sigma_offset is not None
+                               else round(random.uniform(0.5, 3.0), 2)),
+            'capacity_ratio': (capacity_ratio if capacity_ratio is not None
+                               else random.triangular(MIN_CAPACITY, MAX_CAPACITY,
+                                                      MIN_CAPACITY + 0.15)),
+            'cost_exponent':  (cost_exponent if cost_exponent is not None
+                               else round(random.uniform(0.7, 1.5), 2)),
+            'use_diagonal':   True,
+        }
+
     def _generate_random_genome(self, name: str) -> dict:
         gen_type = random.choices(ALL_GEN_TYPES, weights=GEN_TYPE_WEIGHTS)[0]
         if gen_type == 'lsb':
             return self._new_lsb(name)
         if gen_type == 'dct':
             return self._new_dct(name)
+        if gen_type == 'adaptive':
+            return self._new_adaptive(name)
         return self._new_fft(name)
 
     # ── Fitness ───────────────────────────────────────────────────────────────
@@ -224,6 +261,28 @@ class EvolutionaryManager:
                     base['capacity_ratio'] = g['capacity_ratio']
                     g = base
 
+            elif gt == 'adaptive':
+                field = random.choice(
+                    ['mode', 'sigma_offset', 'cost_exponent', 'capacity', 'diagonal', 'gen_type'])
+                if field == 'mode':
+                    other_modes = [m for m in ADAPTIVE_MODES if m != g['adaptive_mode']]
+                    g['adaptive_mode'] = random.choice(other_modes)
+                elif field == 'sigma_offset':
+                    g['sigma_offset'] = round(max(0.1, min(5.0,
+                        g['sigma_offset'] + random.uniform(-0.5, 0.5))), 2)
+                elif field == 'cost_exponent':
+                    g['cost_exponent'] = round(max(0.5, min(2.0,
+                        g['cost_exponent'] + random.uniform(-0.3, 0.3))), 2)
+                elif field == 'capacity':
+                    g['capacity_ratio'] = max(MIN_CAPACITY, min(MAX_CAPACITY,
+                        g['capacity_ratio'] + random.uniform(-0.15, 0.15)))
+                elif field == 'diagonal':
+                    g['use_diagonal'] = not g.get('use_diagonal', True)
+                elif field == 'gen_type' and random.random() < 0.10:
+                    base = self._new_fft(g['name'])
+                    base['capacity_ratio'] = g['capacity_ratio']
+                    g = base
+
         return g
 
     def crossover(self, g1: dict, g2: dict) -> dict:
@@ -249,6 +308,11 @@ class EvolutionaryManager:
         elif gt == 'fft':
             if random.random() < 0.5: child['freq_band'] = g2['freq_band']
             if random.random() < 0.5: child['strength']  = g2['strength']
+        elif gt == 'adaptive':
+            if random.random() < 0.5: child['adaptive_mode']  = g2['adaptive_mode']
+            if random.random() < 0.5: child['sigma_offset']   = g2['sigma_offset']
+            if random.random() < 0.5: child['cost_exponent']  = g2['cost_exponent']
+            if random.random() < 0.5: child['use_diagonal']   = g2['use_diagonal']
 
         if random.random() < 0.5:
             child['capacity_ratio'] = g2['capacity_ratio']
@@ -268,12 +332,22 @@ class EvolutionaryManager:
 
     def _is_duplicate(self, genome: dict, population: list) -> bool:
         for g in population:
-            if (g['gen_type'] == genome['gen_type']
-                    and g.get('freq_band') == genome.get('freq_band')
-                    and abs(g.get('strength', 0) - genome.get('strength', 0)) < 0.5
-                    and abs(g.get('capacity_ratio', 0)
-                            - genome.get('capacity_ratio', 0)) < 0.05):
-                return True
+            if g['gen_type'] != genome['gen_type']:
+                continue
+            cap_close = (abs(g.get('capacity_ratio', 0)
+                             - genome.get('capacity_ratio', 0)) < 0.05)
+            gt = genome['gen_type']
+            if gt == 'adaptive':
+                if (g.get('adaptive_mode') == genome.get('adaptive_mode')
+                        and abs(g.get('sigma_offset', 0)
+                                - genome.get('sigma_offset', 0)) < 0.3
+                        and cap_close):
+                    return True
+            else:
+                if (g.get('freq_band') == genome.get('freq_band')
+                        and abs(g.get('strength', 0) - genome.get('strength', 0)) < 0.5
+                        and cap_close):
+                    return True
         return False
 
     def evolve(self) -> dict:
@@ -331,8 +405,12 @@ class EvolutionaryManager:
             elif niche == 'dct':
                 new_pop.append(self._new_dct(f"Explore_dct_{self.generation}"))
             elif niche.startswith('fft_'):
-                band = niche.split('_', 1)[1]   # 'low', 'mid', or 'high'
+                band = niche.split('_', 1)[1]
                 new_pop.append(self._new_fft(f"Explore_{niche}_{self.generation}", band))
+            elif niche.startswith('adaptive_'):
+                mode = niche.split('_', 1)[1]
+                new_pop.append(
+                    self._new_adaptive(f"Explore_{niche}_{self.generation}", mode))
 
         # Fill remainder by mutating top parents
         while len(new_pop) < POPULATION_SIZE:
@@ -357,7 +435,11 @@ class EvolutionaryManager:
             elif gt == 'dct':
                 detail = (f"Coeff={g['coeff_selection']} Str={g['strength']:.1f} "
                           f"Cap={g['capacity_ratio']:.2f}")
-            else:
+            elif gt == 'adaptive':
+                detail = (f"Mode={g['adaptive_mode']} Sig={g.get('sigma_offset', 1.0):.2f} "
+                          f"Exp={g.get('cost_exponent', 1.0):.2f} "
+                          f"Cap={g['capacity_ratio']:.2f}")
+            else:  # fft
                 detail = (f"Band={g['freq_band']} Str={g['strength']:.1f} "
                           f"Cap={g['capacity_ratio']:.2f}")
             print(f"  #{i+1}: {g['name']} — {sc:.2f}% (raw {raw:.1f}%) | "
@@ -400,7 +482,6 @@ class EvolutionaryManager:
         if candidates:
             return random.choice(candidates)
 
-        # Construct a fallback if none exist in the population
         choice = random.choice(['lsb_edge', 'lsb_sequential', 'fft_low'])
         if choice == 'lsb_edge':
             g = self._new_lsb("tmp_lowcap_edge", 'edge')
@@ -431,12 +512,7 @@ class EvolutionaryManager:
         return g
 
     def get_lowstrength_fft_low_genome(self):
-        """
-        Return an fft_low genome with strength ≤ 7.5 (bottom quarter of range).
-        Used by batch.py Layer 5 to force the model to see the weak fft_low
-        low-strength configs every batch during fine-tuning.
-        Falls back to a freshly constructed genome if none exist in the population.
-        """
+        """Return an fft_low genome with strength ≤ 7.5. Falls back to a fresh genome."""
         candidates = [
             g for g in self.population
             if g.get('gen_type') == 'fft'
@@ -445,19 +521,13 @@ class EvolutionaryManager:
         ]
         if candidates:
             return random.choice(candidates)
-        # Population hasn't evolved low-strength fft_low genomes yet — construct one.
         g = self._new_fft("tmp_lowstrength_fft_low", 'low')
         g['strength'] = round(random.uniform(2.0, 5.0), 2)
         g['capacity_ratio'] = random.uniform(0.35, 0.55)
         return g
 
     def get_lowstrength_dct_lowmid_genome(self):
-        """
-        Return a dct_low_mid genome with strength ≤ 3.5 (bottom quarter of range).
-        Used by batch.py Layer 6 to force the model to see the weak dct_low_mid
-        low-strength configs every batch during fine-tuning.
-        Falls back to a freshly constructed genome if none exist in the population.
-        """
+        """Return a dct_low_mid genome with strength ≤ 3.5. Falls back to a fresh genome."""
         candidates = [
             g for g in self.population
             if g.get('gen_type') == 'dct'
@@ -466,7 +536,16 @@ class EvolutionaryManager:
         ]
         if candidates:
             return random.choice(candidates)
-        # Population hasn't evolved low-strength dct_low_mid genomes yet — construct one.
         g = self._new_dct("tmp_lowstrength_dct_lowmid", 'low_mid')
         g['strength'] = round(random.uniform(1.5, 3.0), 2)
         return g
+
+    def get_adaptive_genome(self, mode: str) -> dict:
+        """Return an adaptive genome of the given mode. Falls back to a fresh genome."""
+        candidates = [
+            g for g in self.population
+            if g.get('gen_type') == 'adaptive' and g.get('adaptive_mode') == mode
+        ]
+        if candidates:
+            return random.choice(candidates)
+        return self._new_adaptive(f"tmp_adaptive_{mode}", mode)
