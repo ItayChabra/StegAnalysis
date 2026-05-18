@@ -1,22 +1,18 @@
 """
-inference.py — Sliding-window steganalysis with pluggable score aggregation.
+test_kaggle.py — Sliding-window steganalysis benchmark with mode comparison.
 
-Key changes vs previous version
----------------------------------
-BENCHMARK EVALUATION
-  The script now evaluates both Cover (negative) and Stego (positive) directories
-  to accurately calculate True Positive and True Negative rates across different
-  datasets (BOSSbase/BOWS2, Flickr30k, Kaggle methods).
+Every image is reduced to luminance and scored once with the sliding window.
+The raw per-window scores are kept, then EVERY aggregation mode (max / mean /
+vote / p80) is derived from that single inference pass and run through a
+threshold sweep — so the deployable (mode, threshold) pair can be picked from
+real data instead of guessed.
 
-AGGREGATION MODES
-  'max'    — original behaviour: P(stego) = max window score.
-             Good when the stego signal is strong and localised (FFT, high-cap LSB).
-  'mean'   — arithmetic mean of all window scores.
-             More stable than max for signals distributed across the whole image.
-  'vote'   — fraction of windows with score ≥ VOTE_FLOOR.
-             Best for weak/distributed signals (DCT, low-capacity steganography).
-  'p80'    — 80th-percentile window score.
-             A compromise: less volatile than max, more sensitive than mean.
+AGGREGATION MODES (aggregate_scores)
+  'max'  — highest window score. Best for uniform stego (LSB/DCT/FFT); spikes
+           false positives on textured covers.
+  'mean' — arithmetic mean. Lowest cover scores; dilutes localised stego.
+  'vote' — fraction of windows >= VOTE_FLOOR.
+  'p80'  — 80th-percentile window score. Middle ground.
 """
 
 import glob
@@ -32,40 +28,41 @@ from models.srnet import SRNet
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
-MODEL_CHECKPOINT = 'srnet_ft_epoch_20.pth'
+MODEL_CHECKPOINT = 'srnet_ft_epoch_15.pth'
 DEVICE           = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+# A deployable detector uses ONE aggregation mode and ONE threshold for every
+# image. This script scores once, then compares all modes so the best pair can
+# be read off the threshold sweep.
+AGG_MODES = ['max', 'mean', 'vote', 'p80']
 
 WINDOW_SIZE   = 256
 WINDOW_STRIDE = 64
 VOTE_FLOOR    = 0.35   # lowered from 0.40: adaptive stego scores cluster around 0.35–0.45
-BATCH_SIZE = 64
+BATCH_SIZE    = 64
 
 # Define base paths as seen in your environment
 KAGGLE_DIR = '/home/linuxu/PycharmProjects/StegAnalysis/data/Kaggle_Testing'
 RAW_DIR    = '/home/linuxu/PycharmProjects/StegAnalysis/data/raw'
 
 # Per-folder configuration for the benchmark.
-# 'label'     — 0 for Covers (expecting 0% detection), 1 for Stego (expecting 100% detection).
-# 'threshold' — final decision boundary on the aggregated score.
-# 'mode'      — aggregation strategy ('max' | 'mean' | 'vote' | 'p80').
+# 'label' — 0 for Covers (expecting 0% detection), 1 for Stego (expecting 100%).
+# 'group' — 'cover' | 'basic' (LSB/DCT/FFT) | 'adaptive' (WOW/S-UNIWARD/HUGO);
+#           used to break the threshold sweep down by difficulty class.
 TEST_TARGETS = [
     # ── COVERS (Expected: Clean / 0% Stego) ──────────────────────────────────
-    {'name': 'BOSS & BOWS2',  'path': os.path.join(RAW_DIR, 'BossBase and BOWS2'),       'label': 0, 'threshold': 0.60, 'mode': 'mean'},
-    {'name': 'Flickr30k',     'path': os.path.join(RAW_DIR, 'flickr30k'),                'label': 0, 'threshold': 0.60, 'mode': 'mean'},
+    {'name': 'BOSS & BOWS2',  'path': os.path.join(RAW_DIR, 'BossBase and BOWS2'),  'label': 0, 'group': 'cover'},
+    {'name': 'Flickr30k',     'path': os.path.join(RAW_DIR, 'flickr30k'),           'label': 0, 'group': 'cover'},
 
     # ── SPATIAL / ADAPTIVE STEGO (Expected: 100% Stego) ──────────────────────
-    # p80: 80th-percentile window score — more sensitive than vote for spatially
-    # uniform embedding where the signal is diffuse across all windows.
-    # Threshold 0.45 targets the upper tail of the score distribution.
-    {'name': 'HUGO',          'path': os.path.join(KAGGLE_DIR, 'HUGO'),                  'label': 1, 'threshold': 0.45, 'mode': 'p80'},
-    {'name': 'S-UNIWARD',     'path': os.path.join(KAGGLE_DIR, 'S-UNIWARD'),             'label': 1, 'threshold': 0.45, 'mode': 'p80'},
-    {'name': 'WOW',           'path': os.path.join(KAGGLE_DIR, 'WOW'),                   'label': 1, 'threshold': 0.45, 'mode': 'p80'},
-    {'name': 'LSB',           'path': os.path.join(KAGGLE_DIR, 'lsb'),                   'label': 1, 'threshold': 0.50, 'mode': 'max'},
+    {'name': 'HUGO',          'path': os.path.join(KAGGLE_DIR, 'HUGO'),             'label': 1, 'group': 'adaptive'},
+    {'name': 'S-UNIWARD',     'path': os.path.join(KAGGLE_DIR, 'S-UNIWARD'),        'label': 1, 'group': 'adaptive'},
+    {'name': 'WOW',           'path': os.path.join(KAGGLE_DIR, 'WOW'),              'label': 1, 'group': 'adaptive'},
 
-    # ── FREQUENCY STEGO (Expected: 100% Stego) ───────────────────────────────
-    # If DCT detection is weak, consider changing 'mode' to 'vote' and threshold to 0.35
-    {'name': 'DCT',           'path': os.path.join(KAGGLE_DIR, 'dct'),                   'label': 1, 'threshold': 0.50, 'mode': 'max'},
-    {'name': 'FFT',           'path': os.path.join(KAGGLE_DIR, 'fft'),                   'label': 1, 'threshold': 0.50, 'mode': 'max'},
+    # ── BASIC STEGO (Expected: 100% Stego) ───────────────────────────────────
+    {'name': 'LSB',           'path': os.path.join(KAGGLE_DIR, 'lsb'),              'label': 1, 'group': 'basic'},
+    {'name': 'DCT',           'path': os.path.join(KAGGLE_DIR, 'dct'),              'label': 1, 'group': 'basic'},
+    {'name': 'FFT',           'path': os.path.join(KAGGLE_DIR, 'fft'),              'label': 1, 'group': 'basic'},
 ]
 
 _LOG_FFT_SCALE = math.log1p(256 * 256)
@@ -80,22 +77,16 @@ def compute_log_fft(spatial_tensor: torch.Tensor) -> torch.Tensor:
     return log_magnitude / _LOG_FFT_SCALE
 
 
-def extract_channels(img_path: str, target_name: str) -> list:
-    img = Image.open(img_path)
+def load_luminance(img_path: str) -> Image.Image:
+    """Return the image as luminance — the single channel SRNet is trained on.
 
-    if img.mode == 'L':
-        return [img]
-
-    if img.mode in ('RGB', 'RGBA'):
-        # LSB stego is hidden per-channel, so split for LSB folders.
-        # For everything else, use luminance — matching training preprocessing.
-        if target_name == 'LSB':
-            r, g, b = img.convert('RGB').split()
-            return [r, g, b]
-        else:
-            return [img.convert('L')]  # ← luminance, exactly as trained
-
-    return [img.convert('L')]
+    SRNet is trained exclusively on grayscale/luminance patches. Feeding raw
+    R/G/B planes of a genuine colour image is out-of-distribution — the model
+    reads demosaicing/chroma artifacts as embedding noise, which collapsed
+    Flickr30k cover TNR to 3%. Every image, grayscale or colour, is reduced to
+    luminance ('L' images convert as a no-op).
+    """
+    return Image.open(img_path).convert('L')
 
 
 # ── Sliding-window inference ──────────────────────────────────────────────────
@@ -175,6 +166,81 @@ def aggregate_scores(scores: list[float], mode: str) -> float:
     raise ValueError(f"Unknown aggregation mode: {mode!r}")
 
 
+# ── Reporting ─────────────────────────────────────────────────────────────────
+
+def aggregate_per_image(results: dict, mode: str) -> dict:
+    """Collapse each image's raw window scores into one score for *mode*.
+
+    results[name] = {'windows': [..per-image lists..], 'label', 'group'}
+    -> {name: {'scores': [..per-image..], 'label', 'group'}}
+    """
+    return {
+        name: {'scores': [aggregate_scores(w, mode) for w in r['windows']],
+               'label': r['label'], 'group': r['group']}
+        for name, r in results.items()
+    }
+
+
+def sweep_rows(scored: dict) -> list:
+    """Sweep the decision threshold and return rows of
+    (thresh, TNR, TPR_basic, TPR_adapt, TPR_all, balanced_acc, Youden_J)."""
+    def pool(group):
+        return np.array([s for r in scored.values()
+                         if r['group'] == group for s in r['scores']])
+
+    cover    = pool('cover')
+    basic    = pool('basic')
+    adaptive = pool('adaptive')
+    parts    = [a for a in (basic, adaptive) if a.size]
+    stego    = np.concatenate(parts) if parts else np.array([])
+
+    if not cover.size or not stego.size:
+        return []
+
+    rows = []
+    for t in np.arange(0.30, 0.8001, 0.05):
+        t     = round(float(t), 3)
+        tnr   = float((cover    <  t).mean() * 100)
+        t_bas = float((basic    >= t).mean() * 100) if basic.size    else 0.0
+        t_ada = float((adaptive >= t).mean() * 100) if adaptive.size else 0.0
+        t_all = float((stego    >= t).mean() * 100)
+        rows.append((t, tnr, t_bas, t_ada, t_all,
+                     (tnr + t_all) / 2, tnr + t_all - 100))
+    return rows
+
+
+def report_mode(results: dict, mode: str):
+    """Print per-target score distributions and the threshold sweep for *mode*.
+    Returns (mode, best_row) where best_row maximises balanced accuracy."""
+    scored = aggregate_per_image(results, mode)
+
+    print("=" * 80)
+    print(f"AGGREGATION MODE: {mode}")
+    print("=" * 80)
+    for name, r in scored.items():
+        s   = np.array(r['scores'])
+        tag = "STEGO" if r['label'] == 1 else "COVER"
+        print(f"  {tag} {name:<14} n={len(s):>3}  "
+              f"min {s.min():.3f}  median {np.median(s):.3f}  "
+              f"mean {s.mean():.3f}  max {s.max():.3f}")
+
+    rows = sweep_rows(scored)
+    if not rows:
+        print("  [sweep skipped — need both cover and stego results]")
+        return mode, None
+
+    best = max(rows, key=lambda r: r[5])
+    print(f"\n  {'thresh':>7} | {'TNR':>7} | {'TPR basic':>10} | "
+          f"{'TPR adapt':>10} | {'TPR all':>8} | {'bal-acc':>8} | {'Youden':>7}")
+    print("  " + "-" * 74)
+    for (t, tnr, t_bas, t_ada, t_all, bal, yj) in rows:
+        mark = '  <-- best bal-acc' if t == best[0] else ''
+        print(f"  {t:>7.2f} | {tnr:>6.1f}% | {t_bas:>9.1f}% | {t_ada:>9.1f}% | "
+              f"{t_all:>7.1f}% | {bal:>7.1f}% | {yj:>6.1f}{mark}")
+    print()
+    return mode, best
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
@@ -190,82 +256,67 @@ def main():
     # Strip torch.compile prefix if present
     state_dict = {k.replace('_orig_mod.', ''): v for k, v in state_dict.items()}
     model.load_state_dict(state_dict)
-    print(f"Weights loaded. Checkpoint val_acc: {checkpoint.get('val_acc', '?')}\n")
+    print(f"Weights loaded. Checkpoint val_acc: {checkpoint.get('val_acc', '?')}")
+    print(f"Comparing aggregation modes: {', '.join(AGG_MODES)}\n")
     model.eval()
 
     to_tensor = transforms.ToTensor()
+    results = {}
 
+    # ── Single inference pass: store raw per-window scores for every image ───
     for target in TEST_TARGETS:
-        name      = target['name']
-        folder    = target['path']
-        label     = target['label']
-        threshold = target['threshold']
-        mode      = target['mode']
+        name, folder = target['name'], target['path']
+        label, group = target['label'], target['group']
 
         if not os.path.exists(folder):
-            print(f"[Skipped] Directory not found: {folder}\n")
+            print(f"[Skipped] Directory not found: {folder}")
             continue
 
         images = sorted(glob.glob(os.path.join(folder, '*.*')))[:200]
         if not images:
-            print(f"[Skipped] No files found in {folder}\n")
+            print(f"[Skipped] No files found in {folder}")
             continue
 
         target_type = "STEGO" if label == 1 else "COVER"
-        print(f"--- Testing {target_type}: '{name}' ({len(images)} images) "
-              f"[mode={mode}, thresh={threshold}] ---")
+        print(f"Scoring {target_type:<5} '{name}' ({len(images)} images)...")
 
-        detected_stego = 0
-        valid_count    = 0
-        final_scores   = []
-
+        per_image_windows = []
         for img_path in images:
             try:
-                channels      = extract_channels(img_path, name)
-                channel_score = 0.0
-
-                for ch_img in channels:
-                    window_scores = sliding_window_scores(model, ch_img, to_tensor)
-                    channel_score = max(channel_score,
-                                        aggregate_scores(window_scores, mode))
-
-                final_scores.append(channel_score)
-                if channel_score >= threshold:
-                    detected_stego += 1
-                valid_count += 1
-
+                lum = load_luminance(img_path)
+                per_image_windows.append(
+                    sliding_window_scores(model, lum, to_tensor))
             except Exception as e:
                 print(f"  Error on {os.path.basename(img_path)}: {e}")
 
-        if valid_count == 0:
-            continue
+        if per_image_windows:
+            results[name] = {'windows': per_image_windows,
+                             'label': label, 'group': group}
 
-        # Calculate accuracy based on what we expect the folder to be
-        if label == 1:
-            # We want it to be detected as stego
-            accuracy = (detected_stego / valid_count) * 100
-        else:
-            # We want it to be detected as cover (NOT stego)
-            correctly_classified_covers = valid_count - detected_stego
-            accuracy = (correctly_classified_covers / valid_count) * 100
+    if not results:
+        print("\nNo results — nothing to report.")
+        return
 
-        s = np.array(final_scores)
+    # ── Compare every aggregation mode from the same inference pass ──────────
+    print()
+    summaries = [report_mode(results, mode) for mode in AGG_MODES]
 
-        print(f"  Detected as Stego: {detected_stego}/{valid_count}")
-        metric_name = "TPR (Detection Rate)" if label == 1 else "TNR (Clean Rate)"
-        print(f"  {metric_name}: {accuracy:.1f}%")
-        print(f"  Score distribution ({mode}) — "
-              f"min: {s.min():.3f}  mean: {s.mean():.3f}  "
-              f"max: {s.max():.3f}  median: {np.median(s):.3f}")
-
-        # Show how many images land in each decision band
-        bands = [0.25, 0.35, 0.50, 0.75]
-        band_str = "  Bands: " + "  |  ".join(
-            f"≥{b:.2f}: {(s >= b).sum()}" for b in bands
-        )
-        print(band_str)
-        print()
-
+    valid = [(m, b) for (m, b) in summaries if b is not None]
+    if valid:
+        print("#" * 80)
+        print("BEST OPERATING POINT PER MODE  (ranked by balanced accuracy)")
+        print("#" * 80)
+        print(f"  {'mode':>6} | {'thresh':>7} | {'TNR':>7} | {'TPR basic':>10} | "
+              f"{'TPR adapt':>10} | {'bal-acc':>8}")
+        print("  " + "-" * 64)
+        for (m, b) in sorted(valid, key=lambda mb: mb[1][5], reverse=True):
+            print(f"  {m:>6} | {b[0]:>7.2f} | {b[1]:>6.1f}% | {b[2]:>9.1f}% | "
+                  f"{b[3]:>9.1f}% | {b[5]:>7.1f}%")
+        best_mode, best_row = max(valid, key=lambda mb: mb[1][5])
+        print("  " + "-" * 64)
+        print(f"  WINNER: mode={best_mode}  threshold={best_row[0]:.2f}  "
+              f"bal-acc={best_row[5]:.1f}%")
+        print("#" * 80)
 
 
 if __name__ == "__main__":

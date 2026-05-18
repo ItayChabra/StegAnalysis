@@ -97,18 +97,22 @@ DEFAULT_CHECKPOINT = 'srnet_best_val.pth'
 # MIN_AUC_FROM_EVAL below and the menu rebuilds automatically.
 
 MIN_AUC_FROM_EVAL = {
-    "lsb_sequential": 0.9501,
-    "lsb_random": 0.9921,
-    "lsb_skip": 0.9718,
-    "lsb_edge": 0.8676,
-    "dct_mid": 0.9352,
-    "dct_low_mid": 0.8684,
-    "fft_low": 0.7917,
-    "fft_mid": 0.9686,
-    "fft_high": 0.6965,
-    "adaptive_wow": 0.9645,
-    "adaptive_suniward": 0.9599,
-    "adaptive_hugo": 0.9477
+    # Recalibrated for the 77% pre-finetune base (srnet_best_val.pth).
+    # Values reflect that checkpoint's actual test_kaggle detection rates.
+    # weight = max(0.02, 1 - value); lower value = more batch share.
+    # Resulting mix ≈ DCT 40% / FFT 30% / adaptive 25% / LSB 6%.
+    "dct_mid": 0.52,  # ~20% — primary target (Kaggle DCT 27.5%)
+    "dct_low_mid": 0.52,  # ~20% — same
+    "fft_low": 0.68,  # ~13% — FFT badly regressed (Kaggle FFT 48%)
+    "fft_mid": 0.76,  # ~10% — off the floor; FFT is NOT "already good"
+    "fft_high": 0.84,  # ~7% — off the floor; FFT is NOT "already good"
+    "adaptive_hugo": 0.80,  # ~8% — adaptive gap (Kaggle HUGO 62%)
+    "adaptive_wow": 0.80,  # ~8% — adaptive gap (Kaggle WOW 64.5%)
+    "adaptive_suniward": 0.80,  # ~8% — adaptive gap (Kaggle S-UNIWARD 64.5%)
+    "lsb_sequential": 0.92,  # ~3% — Kaggle LSB is sequential, keep present
+    "lsb_random": 0.98,  # floor — LSB 99.5% on Kaggle already
+    "lsb_skip": 0.98,  # floor
+    "lsb_edge": 0.98,  # floor
 }
 
 # Reference configs — one representative per strategy (the hard / low-strength one).
@@ -139,15 +143,16 @@ _STRATEGY_CONFIGS = [
     ('fft_high', {'gen_type': 'fft', 'freq_band': 'high',
                   'strength': 3.0, 'capacity_ratio': 0.25}),
 
-    # ── Adaptive (hard variants: low sigma_offset = sharper cost map) ─────────
+    # ── Adaptive — low capacity to match Kaggle's ~0.10 bpp payload ───────────
+    # Jitter ±0.10 gives effective range [0.05, 0.20], centred on Kaggle range.
     ('adaptive_wow', {'gen_type': 'adaptive', 'adaptive_mode': 'wow',
-                      'sigma_offset': 0.5, 'capacity_ratio': 0.30,
+                      'sigma_offset': 0.5, 'capacity_ratio': 0.10,
                       'cost_exponent': 1.2, 'use_diagonal': True}),
     ('adaptive_suniward', {'gen_type': 'adaptive', 'adaptive_mode': 'suniward',
-                           'sigma_offset': 0.5, 'capacity_ratio': 0.30,
+                           'sigma_offset': 0.5, 'capacity_ratio': 0.10,
                            'cost_exponent': 1.2, 'use_diagonal': True}),
     ('adaptive_hugo', {'gen_type': 'adaptive', 'adaptive_mode': 'hugo',
-                       'sigma_offset': 1.0, 'capacity_ratio': 0.40,
+                       'sigma_offset': 1.0, 'capacity_ratio': 0.10,
                        'cost_exponent': 1.0, 'use_diagonal': True}),
 ]
 
@@ -276,9 +281,12 @@ def _generate_pair(args):
         # Randomise capacity within ±0.10 of the reference config to keep variety
         cfg_used = config.copy()
         base_cap = config.get('capacity_ratio', 0.5)
+        min_cap = (cfg.ADAPTIVE_MIN_CAPACITY
+                   if config.get('gen_type') == 'adaptive'
+                   else cfg.MIN_CAPACITY)
         cfg_used['capacity_ratio'] = float(np.clip(
             base_cap + random.uniform(-0.10, 0.10),
-            cfg.MIN_CAPACITY, cfg.MAX_CAPACITY))
+            min_cap, cfg.MAX_CAPACITY))
 
         stego_arr, _ = unified_gen.generate_stego(cover_crop, None, cfg_used)
         if stego_arr is None:

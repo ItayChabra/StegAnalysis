@@ -32,6 +32,8 @@ from training.config import (
     ADAPTIVE_SEED_CONFIGS,
     ALL_GEN_TYPES,
     ALL_NICHES,
+    ADAPTIVE_CAPACITY_PENALTY_THRESHOLD,
+    ADAPTIVE_MIN_CAPACITY,
     CAPACITY_PENALTY_THRESHOLD,
     CAPACITY_PENALTY_WEIGHT,
     DCT_COEFF_MODES,
@@ -173,8 +175,8 @@ class EvolutionaryManager:
             'sigma_offset':   (sigma_offset if sigma_offset is not None
                                else round(random.uniform(0.5, 3.0), 2)),
             'capacity_ratio': (capacity_ratio if capacity_ratio is not None
-                               else random.triangular(MIN_CAPACITY, MAX_CAPACITY,
-                                                      MIN_CAPACITY + 0.15)),
+                               else random.triangular(ADAPTIVE_MIN_CAPACITY, MAX_CAPACITY,
+                                                      ADAPTIVE_MIN_CAPACITY + 0.15)),
             'cost_exponent':  (cost_exponent if cost_exponent is not None
                                else round(random.uniform(0.7, 1.5), 2)),
             'use_diagonal':   True,
@@ -193,9 +195,12 @@ class EvolutionaryManager:
     # ── Fitness ───────────────────────────────────────────────────────────────
 
     def _penalised_fitness(self, genome: dict, raw_fool_rate: float) -> float:
-        capacity = genome.get('capacity_ratio', 0.5)
-        if capacity < CAPACITY_PENALTY_THRESHOLD:
-            shortfall = (CAPACITY_PENALTY_THRESHOLD - capacity) / CAPACITY_PENALTY_THRESHOLD
+        capacity  = genome.get('capacity_ratio', 0.5)
+        threshold = (ADAPTIVE_CAPACITY_PENALTY_THRESHOLD
+                     if genome.get('gen_type') == 'adaptive'
+                     else CAPACITY_PENALTY_THRESHOLD)
+        if capacity < threshold:
+            shortfall = (threshold - capacity) / threshold
             penalty   = shortfall * CAPACITY_PENALTY_WEIGHT
         else:
             penalty = 0.0
@@ -274,7 +279,7 @@ class EvolutionaryManager:
                     g['cost_exponent'] = round(max(0.5, min(2.0,
                         g['cost_exponent'] + random.uniform(-0.3, 0.3))), 2)
                 elif field == 'capacity':
-                    g['capacity_ratio'] = max(MIN_CAPACITY, min(MAX_CAPACITY,
+                    g['capacity_ratio'] = max(ADAPTIVE_MIN_CAPACITY, min(MAX_CAPACITY,
                         g['capacity_ratio'] + random.uniform(-0.15, 0.15)))
                 elif field == 'diagonal':
                     g['use_diagonal'] = not g.get('use_diagonal', True)

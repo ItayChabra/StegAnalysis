@@ -60,10 +60,10 @@ cudnn.benchmark                       = True
 
 
 def run_training(checkpoint_path='srnet_best_val.pth'):
-    print(f"Starting Hybrid Training Run 15 (proper SRM frontend) on {DEVICE}")
-    print("Run 15 changes vs run 14:")
-    print("  Architecture: Triple-branch frontend (30 SRM + 53 spatial + 21 FFT = 104 ch)")
-    print("  Branch A: 30 frozen canonical SRM kernels + TLU (spatial only)")
+    print(f"Starting Hybrid Training Run 16 (reverted SRM + low-capacity adaptive) on {DEVICE}")
+    print("Run 16 changes vs run 15:")
+    print("  Architecture: Triple-branch frontend (11 SRM + 53 spatial + 21 FFT = 85 ch)")
+    print("  Branch A: 11 frozen 3x3 KV+edge SRM kernels (spatial only)")
     print("  Branch B: 53 learnable filters (spatial only — LSB/DCT specialization)")
     print("  Branch C: 21 learnable filters (FFT only — frequency ring specialization)")
     print("  Adaptive: WOW / S-UNIWARD / HUGO integrated from epoch 0 (Layer 7 batch floor)")
@@ -86,7 +86,7 @@ def run_training(checkpoint_path='srnet_best_val.pth'):
     # ── Model ─────────────────────────────────────────────────────────────────
     discriminator = SRNet().to(DEVICE)
     print("[INFO] Compiling model with torch.compile (reduce-overhead)...")
-    discriminator = torch.compile(discriminator, mode='reduce-overhead')
+    discriminator = torch.compile(discriminator, mode='default')
 
     optimizer = optim.Adam(discriminator.parameters(), lr=INITIAL_LR, weight_decay=2e-4)
     criterion = nn.CrossEntropyLoss(reduction='none', label_smoothing=0.1)
