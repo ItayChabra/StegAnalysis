@@ -7,13 +7,14 @@
 
 ## 1. Project Overview
 
-This is a full-stack **AI-powered steganography detection system** built for a live demonstration. The system detects hidden data embedded in images using multiple methods, including basic techniques like LSB/DCT/FFT and advanced adaptive algorithms (WOW, S-UNIWARD, HUGO).
+This is a full-stack **AI-powered steganography detection system** built for a live demonstration. The system detects hidden data embedded in images using three basic techniques (LSB, DCT, FFT) and one adaptive algorithm (S-UNIWARD).
 
 The project consists of:
-1.  **Backend (Python/PyTorch):** A custom triple-branch convolutional network called **SRNet**.
-2.  **API (FastAPI):** A REST interface connecting the ML inference to the client.
-3.  **Generators (Python):** Scripts to embed steganographic payloads for testing/demoing, including advanced cost-based adaptive generators.
-4.  **Frontend (React/Vite):** A non-technical, highly visual UI designed to make the model's reasoning intuitive for a general audience.
+1. **Backend (Python/PyTorch):** A custom triple-branch convolutional network called **SRNet**.
+2. **API (FastAPI):** A REST interface connecting the ML inference to the client.
+3. **Generators (Python):** Scripts to embed steganographic payloads for training and demo. The adaptive generator (`adaptive_gen.py`) implements S-UNIWARD with both a simplified path (default) and a canonical Daubechies-8 back-convolution path (`canonical=True`).
+4. **Training pipeline (Python):** An evolutionary algorithm (EA) breeds generator genomes to maximise fool rate against the current model. See `training/` for all components.
+5. **Frontend (React/Vite):** A non-technical, highly visual UI designed to make the model's reasoning intuitive for a general audience.
 
 ---
 
@@ -22,18 +23,35 @@ The project consists of:
 ```
 / (root)
 ├── CLAUDE.md                  ← you are here
-├── main.py                    ← training entry point
-├── class_demo.py              ← CLI demo (sliding-window detection)
-├── srnet_finetuned_best.pth   ← trained model weights
+├── main.py                    ← training entry point (calls training/train_hybrid.py)
+├── test_kaggle.py             ← sliding-window benchmark; compares aggregation modes
+├── class_demo.py              ← CLI demo (sliding-window detection on a single image)
+├── srnet_finetuned_best.pth   ← current best model weights (val_acc ≈ 87.6%)
+├── dataset_split.json         ← train/val/test split (seed 42, 70/15/15)
+├── training_history.json      ← per-epoch metrics from the last full training run
+├── finetune_history.json      ← per-epoch metrics from the last finetune run
 ├── models/
-│   └── srnet.py               ← SRNet architecture (triple-branch CNN)
+│   └── srnet.py               ← SRNet architecture (triple-branch CNN) — DO NOT MODIFY
 ├── generators/
-│   ├── lsb_gen.py             ← LSB steganography generator
-│   ├── dct_gen.py             ← DCT steganography generator
-│   ├── fft_gen.py             ← FFT steganography generator
-│   ├── adaptive_gen.py        ← WOW / S-UNIWARD / HUGO steganography generator
-│   └── unified_generator.py   ← dispatcher for all generators
-├── training/                  ← model training and validation logic
+│   ├── base_generator.py      ← abstract base class shared by all generators
+│   ├── lsb_gen.py             ← LSB generator (random / sequential / skip strategies)
+│   ├── dct_gen.py             ← DCT generator (mid / low_mid / random coeff modes)
+│   ├── fft_gen.py             ← FFT generator (low / mid / high freq bands)
+│   ├── adaptive_gen.py        ← S-UNIWARD generator; canonical=True enables the
+│   │                             Daubechies-8 back-convolution cost map
+│   └── unified_generator.py   ← dispatcher: routes gen_type to the right generator
+├── training/
+│   ├── config.py              ← ALL hyperparameters and constants — edit here for tuning
+│   ├── train_hybrid.py        ← main training loop (called by main.py)
+│   ├── evolution.py           ← EA: genome population, mutation, fitness, niches
+│   ├── genome.py              ← genome dataclass and seeding logic
+│   ├── batch.py               ← batch construction with diversity layers (7 layers)
+│   ├── validate.py            ← per-epoch validation loop
+│   ├── evaluate.py            ← post-run evaluation; per-generator AUC breakdown
+│   ├── finetune.py            ← head-only fine-tuning on a frozen backbone
+│   ├── dataset.py             ← dataset loading and train/val/test splitting
+│   ├── utils.py               ← shared training utilities
+│   └── evaluation_results/    ← JSON metrics written by evaluate.py
 ├── frontend/                  ← React/Vite web application
 │   ├── src/
 │   │   ├── components/
@@ -60,19 +78,33 @@ The project consists of:
 | LSB | Hides data in the least-significant bit of each pixel | "Pixel-level hiding" |
 | DCT | Hides data in JPEG frequency coefficients | "JPEG frequency hiding" |
 | FFT | Hides data in global frequency rings | "Frequency-domain hiding" |
-| WOW / S-UNIWARD / HUGO | Advanced algorithms that hide data in noisy/textured areas | "Adaptive spatial hiding" |
+| S-UNIWARD | Adaptive algorithm that hides data in noisy/textured areas | "Adaptive spatial hiding" |
 | PSNR | Signal quality metric; >40 dB = visually identical | "Quality score" |
-| Sliding window| Backend ML scan technique (256×256 patches) | **Do not mention in UI** |
-| P(stego) | Model's probability that a patch contains hidden data| "Suspicion score" |
+| Sliding window | Backend ML scan technique (256×256 patches) | **Do not mention in UI** |
+| P(stego) | Model's probability that a patch contains hidden data | "Suspicion score" |
 | Verdict | Final binary decision: clean or stego | "CLEAN" / "HIDDEN DATA FOUND" |
 | Noise map | Amplified pixel residual (stego − cover) × 10 | "What the model sees" |
 | Heatmap | Jet-colourmap of per-patch suspicion scores | "Suspicion map" |
 
 ---
 
-## 4. API Contract
+## 4. Training Pipeline
 
-The FastAPI server runs on `http://localhost:8000`. Communication is strict HTTP REST (no WebSockets/streaming). 
+All hyperparameters live in `training/config.py`. Edit only that file for tuning runs.
+
+**Capacity semantics:** `capacity_ratio` is TRUE bits-per-pixel (bpp) across all generators. Each generator translates bpp into its own quantity internally (pixels for LSB, 8×8 blocks for DCT, frequency components for FFT, λ for adaptive). Physical ceilings: LSB ≤ 1.0 bpp, DCT ≤ ~0.31 bpp, FFT-high ≤ ~0.28 bpp, FFT-low ≤ ~0.017 bpp.
+
+**EA capacity penalty:** Re-enabled at `CAPACITY_PENALTY_WEIGHT = 0.15` with per-method thresholds in `CAPACITY_PENALTY_THRESHOLDS`. Prevents floor-collapse (EA maximising fool rate by driving every genome to its lowest-capacity corner).
+
+**Adaptive curriculum:** Adaptive capacity is NOT evolved by the EA — it is set at embed time by `ADAPTIVE_CURRICULUM_SCHEDULE`. The EA only evolves the S-UNIWARD cost-model shape (sigma_offset, cost_exponent).
+
+**Canonical S-UNIWARD:** `adaptive_gen.py` supports `canonical=True`, which activates the Daubechies-8 back-convolution cost map that matches the reference implementation. Default is `canonical=False` (simplified path). Wiring `canonical=True` into the training pipeline is required before the model can learn to detect canonical S-UNIWARD images.
+
+---
+
+## 5. API Contract
+
+The FastAPI server runs on `http://localhost:8000`. Communication is strict HTTP REST (no WebSockets/streaming).
 
 ### POST `/api/analyze`
 Uploads an image (`multipart/form-data`) and runs synchronous SRNet inference. Returns JSON with confidence, metrics, window scores, and URLs for the generated heatmap and noisemap.
@@ -87,11 +119,10 @@ Returns a PNG of the amplified pixel residual.
 Demo tool that embeds a payload using one of the generators. Returns the stego image URL and metrics.
 
 **Request:**
-
 ```
 Content-Type: multipart/form-data
 file:       [image file]
-strategy:   "lsb_sequential" | "lsb_edge" | "dct_mid" | "fft_mid" | "wow" | "suniward" | "hugo"
+strategy:   "lsb_sequential" | "dct_mid" | "fft_mid"
 capacity:   0.5   (float, sent as a form field, range 0.1–0.75)
 ```
 
@@ -106,14 +137,11 @@ capacity:   0.5   (float, sent as a form field, range 0.1–0.75)
 ```
 
 ### GET `/api/stego/{job_id}`
-
 Returns the stego PNG produced by `/api/embed`.
 
 ---
 
-## 5. Working Conventions
-
-Depending on which part of the stack you are modifying, adhere to the following rules:
+## 6. Working Conventions
 
 ### General Context
 
@@ -136,7 +164,7 @@ Depending on which part of the stack you are modifying, adhere to the following 
 
 ---
 
-## 6. Running the Stack
+## 7. Running the Stack
 
 ### Backend (Terminal 1):
 ```bash
@@ -152,14 +180,18 @@ npm run dev
 # Opens at http://localhost:5173
 ```
 
+### Benchmark:
+```bash
+python test_kaggle.py --checkpoint srnet_finetuned_best.pth --images 200
+```
+
 ---
 
-## 7. Critical Protected Files
+## 8. Critical Protected Files
 
-Unless explicitly instructed otherwise by the user, do not modify the following core ML files, as they represent frozen, verified architectures and weights:
+Unless explicitly instructed otherwise by the user, do not modify the following files:
 
-- `models/srnet.py`
-- `srnet_best_val.pth`
-- `srnet_finetuned_best.pth`
-- `finetune_history.json`
-- any .pth file
+- `models/srnet.py` — frozen architecture
+- `srnet_finetuned_best.pth` — current best after finetune weights
+- `srnet_best_val.pth` — current best after training weights
+- any `.pth` file — all checkpoint files are training artifacts
