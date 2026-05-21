@@ -12,7 +12,7 @@ class UnifiedGenerator:
         'lsb'      — Spatial LSB embedding      (LSBGenerator)
         'dct'      — Block DCT embedding         (DCTGenerator)
         'fft'      — Global FFT embedding        (FFTGenerator)
-        'adaptive' — WOW / S-UNIWARD / HUGO      (AdaptiveGenerator)
+        'adaptive' — S-UNIWARD adaptive embedding (AdaptiveGenerator)
 
     generate_stego() accepts a file path (str), PIL.Image, or np.ndarray as
     cover_input, so callers never need to write a temporary file to disk.

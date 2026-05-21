@@ -15,7 +15,7 @@ KEY CHANGE vs previous version:
   For a security application, MIN AUC is the operative number — it tells you
   the worst-case operating point a real attacker could exploit.
 
-Evaluates strategies: 4 LSB + 2 DCT + 3 FFT + 3 Adaptive (WOW / S-UNIWARD / HUGO).
+Evaluates strategies: 3 LSB + 2 DCT + 3 FFT + 1 Adaptive (S-UNIWARD).
 
 Outputs:
   - Per-strategy mean/min AUC table printed to console
@@ -83,66 +83,58 @@ STRATEGY_CONFIGS = {
     # ── LSB Spatial ──────────────────────────────────────────────────────────
 
     'lsb_sequential': [
-        {'label': 'low_cap',  'gen_type': 'lsb', 'strategy': 'sequential', 'capacity_ratio': 0.25, 'edge_threshold': 0, 'bit_depth': 1, 'step': 1, 'message': None},
-        {'label': 'mid_cap',  'gen_type': 'lsb', 'strategy': 'sequential', 'capacity_ratio': 0.50, 'edge_threshold': 0, 'bit_depth': 1, 'step': 1, 'message': None},  # reference
-        {'label': 'high_cap', 'gen_type': 'lsb', 'strategy': 'sequential', 'capacity_ratio': 0.75, 'edge_threshold': 0, 'bit_depth': 1, 'step': 1, 'message': None},
+        {'label': 'low_cap',  'gen_type': 'lsb', 'strategy': 'sequential', 'capacity_ratio': 0.25, 'bit_depth': 1, 'step': 1, 'message': None},
+        {'label': 'mid_cap',  'gen_type': 'lsb', 'strategy': 'sequential', 'capacity_ratio': 0.50, 'bit_depth': 1, 'step': 1, 'message': None},  # reference
+        {'label': 'high_cap', 'gen_type': 'lsb', 'strategy': 'sequential', 'capacity_ratio': 0.75, 'bit_depth': 1, 'step': 1, 'message': None},
     ],
 
     'lsb_random': [
-        {'label': 'low_cap',  'gen_type': 'lsb', 'strategy': 'random', 'capacity_ratio': 0.25, 'edge_threshold': 0, 'bit_depth': 1, 'step': 1, 'message': None},
-        {'label': 'mid_cap',  'gen_type': 'lsb', 'strategy': 'random', 'capacity_ratio': 0.50, 'edge_threshold': 0, 'bit_depth': 1, 'step': 1, 'message': None},  # reference
-        {'label': 'high_cap', 'gen_type': 'lsb', 'strategy': 'random', 'capacity_ratio': 0.75, 'edge_threshold': 0, 'bit_depth': 1, 'step': 1, 'message': None},
+        {'label': 'low_cap',  'gen_type': 'lsb', 'strategy': 'random', 'capacity_ratio': 0.25, 'bit_depth': 1, 'step': 1, 'message': None},
+        {'label': 'mid_cap',  'gen_type': 'lsb', 'strategy': 'random', 'capacity_ratio': 0.50, 'bit_depth': 1, 'step': 1, 'message': None},  # reference
+        {'label': 'high_cap', 'gen_type': 'lsb', 'strategy': 'random', 'capacity_ratio': 0.75, 'bit_depth': 1, 'step': 1, 'message': None},
     ],
 
     'lsb_skip': [
-        {'label': 'tight_step',  'gen_type': 'lsb', 'strategy': 'skip', 'capacity_ratio': 0.40, 'edge_threshold': 95, 'bit_depth': 1, 'step': 2,  'message': None},
-        {'label': 'mid_step',    'gen_type': 'lsb', 'strategy': 'skip', 'capacity_ratio': 0.56, 'edge_threshold': 95, 'bit_depth': 1, 'step': 3,  'message': None},  # reference
-        {'label': 'large_step',  'gen_type': 'lsb', 'strategy': 'skip', 'capacity_ratio': 0.70, 'edge_threshold': 95, 'bit_depth': 1, 'step': 7,  'message': None},
-    ],
-
-    'lsb_edge': [
-        # Edge embedding is hardest at low capacity + low threshold (few edge pixels used).
-        # The reference config is the hardest point; we also test slightly easier variants.
-        {'label': 'hard',   'gen_type': 'lsb', 'strategy': 'edge', 'capacity_ratio': 0.21, 'edge_threshold': 9,  'bit_depth': 1, 'step': 1, 'message': None},  # reference
-        {'label': 'medium', 'gen_type': 'lsb', 'strategy': 'edge', 'capacity_ratio': 0.35, 'edge_threshold': 15, 'bit_depth': 1, 'step': 1, 'message': None},
-        {'label': 'easy',   'gen_type': 'lsb', 'strategy': 'edge', 'capacity_ratio': 0.50, 'edge_threshold': 30, 'bit_depth': 1, 'step': 1, 'message': None},
+        {'label': 'tight_step',  'gen_type': 'lsb', 'strategy': 'skip', 'capacity_ratio': 0.40, 'bit_depth': 1, 'step': 2,  'message': None},
+        {'label': 'mid_step',    'gen_type': 'lsb', 'strategy': 'skip', 'capacity_ratio': 0.56, 'bit_depth': 1, 'step': 3,  'message': None},  # reference
+        {'label': 'large_step',  'gen_type': 'lsb', 'strategy': 'skip', 'capacity_ratio': 0.70, 'bit_depth': 1, 'step': 7,  'message': None},
     ],
 
     # ── DCT Block Frequency ───────────────────────────────────────────────────
 
     'dct_mid': [
-        {'label': 'low_strength',  'gen_type': 'dct', 'coeff_selection': 'mid', 'strength': 1.5, 'capacity_ratio': 0.50},
-        {'label': 'mid_strength',  'gen_type': 'dct', 'coeff_selection': 'mid', 'strength': 3.0, 'capacity_ratio': 0.50},  # reference
-        {'label': 'high_strength', 'gen_type': 'dct', 'coeff_selection': 'mid', 'strength': 6.0, 'capacity_ratio': 0.50},
+        {'label': 'low_strength',  'gen_type': 'dct', 'coeff_selection': 'mid', 'strength': 3.0, 'capacity_ratio': 0.10},
+        {'label': 'mid_strength',  'gen_type': 'dct', 'coeff_selection': 'mid', 'strength': 5.0, 'capacity_ratio': 0.20},  # reference
+        {'label': 'high_strength', 'gen_type': 'dct', 'coeff_selection': 'mid', 'strength': 8.0, 'capacity_ratio': 0.30},
     ],
 
     'dct_low_mid': [
-        {'label': 'low_strength',  'gen_type': 'dct', 'coeff_selection': 'low_mid', 'strength': 2.0, 'capacity_ratio': 0.40},
-        {'label': 'mid_strength',  'gen_type': 'dct', 'coeff_selection': 'low_mid', 'strength': 3.0, 'capacity_ratio': 0.40},  # reference
-        {'label': 'high_strength', 'gen_type': 'dct', 'coeff_selection': 'low_mid', 'strength': 5.0, 'capacity_ratio': 0.40},
+        {'label': 'low_strength',  'gen_type': 'dct', 'coeff_selection': 'low_mid', 'strength': 3.0, 'capacity_ratio': 0.08},
+        {'label': 'mid_strength',  'gen_type': 'dct', 'coeff_selection': 'low_mid', 'strength': 5.0, 'capacity_ratio': 0.13},  # reference
+        {'label': 'high_strength', 'gen_type': 'dct', 'coeff_selection': 'low_mid', 'strength': 8.0, 'capacity_ratio': 0.18},
     ],
 
     # ── FFT Global Frequency ──────────────────────────────────────────────────
 
-    # fft_low: the run-3 weak spot. Three configs bracket the reference point
-    # (strength=10, capacity=0.35) so we see whether the fix produces robust
-    # coverage or just memorizes the reference.
+    # fft_low: the run-3 weak spot. Three configs sweep strength around the
+    # reference point (strength=13, capacity=0.05) so we see whether the fix
+    # produces robust coverage or just memorizes the reference.
     'fft_low': [
-        {'label': 'low_strength',  'gen_type': 'fft', 'freq_band': 'low', 'strength': 5.0,  'capacity_ratio': 0.50},
-        {'label': 'mid_strength',  'gen_type': 'fft', 'freq_band': 'low', 'strength': 10.0, 'capacity_ratio': 0.35},  # reference (run-3 eval point)
-        {'label': 'high_strength', 'gen_type': 'fft', 'freq_band': 'low', 'strength': 15.0, 'capacity_ratio': 0.25},
+        {'label': 'low_strength',  'gen_type': 'fft', 'freq_band': 'low', 'strength': 8.0,  'capacity_ratio': 0.05},
+        {'label': 'mid_strength',  'gen_type': 'fft', 'freq_band': 'low', 'strength': 13.0, 'capacity_ratio': 0.05},  # reference
+        {'label': 'high_strength', 'gen_type': 'fft', 'freq_band': 'low', 'strength': 20.0, 'capacity_ratio': 0.05},
     ],
 
     'fft_mid': [
-        {'label': 'low_strength',  'gen_type': 'fft', 'freq_band': 'mid', 'strength': 4.0, 'capacity_ratio': 0.30},
-        {'label': 'mid_strength',  'gen_type': 'fft', 'freq_band': 'mid', 'strength': 8.0, 'capacity_ratio': 0.30},  # reference
-        {'label': 'high_strength', 'gen_type': 'fft', 'freq_band': 'mid', 'strength': 14.0,'capacity_ratio': 0.30},
+        {'label': 'low_strength',  'gen_type': 'fft', 'freq_band': 'mid', 'strength': 8.0,  'capacity_ratio': 0.05},
+        {'label': 'mid_strength',  'gen_type': 'fft', 'freq_band': 'mid', 'strength': 13.0, 'capacity_ratio': 0.10},  # reference
+        {'label': 'high_strength', 'gen_type': 'fft', 'freq_band': 'mid', 'strength': 20.0, 'capacity_ratio': 0.14},
     ],
 
     'fft_high': [
-        {'label': 'low_strength',  'gen_type': 'fft', 'freq_band': 'high', 'strength': 3.0, 'capacity_ratio': 0.25},
-        {'label': 'mid_strength',  'gen_type': 'fft', 'freq_band': 'high', 'strength': 6.0, 'capacity_ratio': 0.25},  # reference
-        {'label': 'high_strength', 'gen_type': 'fft', 'freq_band': 'high', 'strength': 10.0,'capacity_ratio': 0.25},
+        {'label': 'low_strength',  'gen_type': 'fft', 'freq_band': 'high', 'strength': 8.0,  'capacity_ratio': 0.08},
+        {'label': 'mid_strength',  'gen_type': 'fft', 'freq_band': 'high', 'strength': 13.0, 'capacity_ratio': 0.15},  # reference
+        {'label': 'high_strength', 'gen_type': 'fft', 'freq_band': 'high', 'strength': 20.0, 'capacity_ratio': 0.25},
     ],
 
     # ── Adaptive Spatial Stego ────────────────────────────────────────────────
@@ -154,22 +146,10 @@ STRATEGY_CONFIGS = {
     # sigma_offset: higher = smoother cost surface = easier to detect.
     # cost_exponent: higher = more concentrated embedding in texture.
 
-    'adaptive_wow': [
-        {'label': 'low_cap',  'gen_type': 'adaptive', 'adaptive_mode': 'wow', 'capacity_ratio': 0.20, 'sigma_offset': 0.5, 'cost_exponent': 1.2, 'use_diagonal': True},
-        {'label': 'mid_cap',  'gen_type': 'adaptive', 'adaptive_mode': 'wow', 'capacity_ratio': 0.30, 'sigma_offset': 0.5, 'cost_exponent': 1.2, 'use_diagonal': True},  # reference
-        {'label': 'high_cap', 'gen_type': 'adaptive', 'adaptive_mode': 'wow', 'capacity_ratio': 0.50, 'sigma_offset': 1.0, 'cost_exponent': 1.0, 'use_diagonal': True},
-    ],
-
     'adaptive_suniward': [
-        {'label': 'low_cap',  'gen_type': 'adaptive', 'adaptive_mode': 'suniward', 'capacity_ratio': 0.20, 'sigma_offset': 0.5, 'cost_exponent': 1.2, 'use_diagonal': True},
-        {'label': 'mid_cap',  'gen_type': 'adaptive', 'adaptive_mode': 'suniward', 'capacity_ratio': 0.30, 'sigma_offset': 0.5, 'cost_exponent': 1.2, 'use_diagonal': True},  # reference
-        {'label': 'high_cap', 'gen_type': 'adaptive', 'adaptive_mode': 'suniward', 'capacity_ratio': 0.50, 'sigma_offset': 1.0, 'cost_exponent': 1.0, 'use_diagonal': True},
-    ],
-
-    'adaptive_hugo': [
-        {'label': 'low_cap',  'gen_type': 'adaptive', 'adaptive_mode': 'hugo', 'capacity_ratio': 0.25, 'sigma_offset': 1.0, 'cost_exponent': 1.0, 'use_diagonal': True},
-        {'label': 'mid_cap',  'gen_type': 'adaptive', 'adaptive_mode': 'hugo', 'capacity_ratio': 0.40, 'sigma_offset': 1.0, 'cost_exponent': 1.0, 'use_diagonal': True},  # reference
-        {'label': 'high_cap', 'gen_type': 'adaptive', 'adaptive_mode': 'hugo', 'capacity_ratio': 0.55, 'sigma_offset': 2.0, 'cost_exponent': 0.8, 'use_diagonal': True},
+        {'label': 'low_cap',  'gen_type': 'adaptive', 'adaptive_mode': 'suniward', 'capacity_ratio': 0.20, 'sigma_offset': 1.0, 'cost_exponent': 1.0, 'use_diagonal': True},
+        {'label': 'mid_cap',  'gen_type': 'adaptive', 'adaptive_mode': 'suniward', 'capacity_ratio': 0.40, 'sigma_offset': 1.0, 'cost_exponent': 1.0, 'use_diagonal': True},  # reference
+        {'label': 'high_cap', 'gen_type': 'adaptive', 'adaptive_mode': 'suniward', 'capacity_ratio': 0.75, 'sigma_offset': 1.0, 'cost_exponent': 1.0, 'use_diagonal': True},
     ],
 }
 
@@ -374,7 +354,7 @@ def save_roc_plot(all_strategy_roc, output_path):
             'LSB Strategies':      [k for k in all_strategy_roc if k.startswith('lsb_')],
             'DCT Variants':        [k for k in all_strategy_roc if k.startswith('dct_')],
             'FFT Variants':        [k for k in all_strategy_roc if k.startswith('fft_')],
-            'Adaptive (WOW/S-UNI/HUGO)': [k for k in all_strategy_roc if k.startswith('adaptive_')],
+            'Adaptive (S-UNIWARD)': [k for k in all_strategy_roc if k.startswith('adaptive_')],
         }
         for ax, (title, keys) in zip(axes, groups.items()):
             for i, key in enumerate(keys):
@@ -480,7 +460,7 @@ def run_evaluation(model_path, split_file, output_dir, images_per_config):
             config_results.append(result)
 
             # Use the middle (reference) config for the ROC plot curve.
-            if label in ('mid_cap', 'mid_strength', 'mid_step', 'hard', 'mid_strength'):
+            if label in ('mid_cap', 'mid_strength', 'mid_step'):
                 ref_fpr = fpr_list
                 ref_tpr = tpr_list
             # Fallback: always keep the last one in case none matched.

@@ -97,25 +97,21 @@ DEFAULT_CHECKPOINT = 'srnet_best_val.pth'
 # MIN_AUC_FROM_EVAL below and the menu rebuilds automatically.
 
 MIN_AUC_FROM_EVAL = {
-    # Recalibrated for the 77% pre-finetune base (srnet_best_val.pth).
-    # Values reflect that checkpoint's actual test_kaggle detection rates.
-    # weight = max(0.02, 1 - value); lower value = more batch share.
-    # Resulting mix ≈ DCT 40% / FFT 30% / adaptive 25% / LSB 6%.
-    "dct_mid": 0.52,  # ~20% — primary target (Kaggle DCT 27.5%)
-    "dct_low_mid": 0.52,  # ~20% — same
-    "fft_low": 0.68,  # ~13% — FFT badly regressed (Kaggle FFT 48%)
-    "fft_mid": 0.76,  # ~10% — off the floor; FFT is NOT "already good"
-    "fft_high": 0.84,  # ~7% — off the floor; FFT is NOT "already good"
-    "adaptive_hugo": 0.80,  # ~8% — adaptive gap (Kaggle HUGO 62%)
-    "adaptive_wow": 0.80,  # ~8% — adaptive gap (Kaggle WOW 64.5%)
-    "adaptive_suniward": 0.80,  # ~8% — adaptive gap (Kaggle S-UNIWARD 64.5%)
-    "lsb_sequential": 0.92,  # ~3% — Kaggle LSB is sequential, keep present
-    "lsb_random": 0.98,  # floor — LSB 99.5% on Kaggle already
-    "lsb_skip": 0.98,  # floor
-    "lsb_edge": 0.98,  # floor
+    "lsb_sequential": 0.7448,
+    "lsb_random": 0.6741,
+    "lsb_skip": 0.5984,
+    "dct_mid": 0.9372,
+    "dct_low_mid": 0.7846,
+    "fft_low": 0.85,  # raised from 0.681 — physically capped, don't over-invest
+    "fft_mid": 0.7003,
+    "fft_high": 0.9937,
+    "adaptive_suniward": 0.80,  # raised from 0.5204 — mismatch dead-end, keep modest not dominant
 }
 
-# Reference configs — one representative per strategy (the hard / low-strength one).
+# Reference configs — one representative per strategy. capacity_ratio is TRUE
+# bits-per-pixel; strength/capacity match evaluate.py's mid reference point so
+# finetune and evaluation operate on the same per-strategy operating point.
+# The ±0.10 capacity jitter applied at embed time spreads coverage either side.
 _STRATEGY_CONFIGS = [
     # ── LSB ──────────────────────────────────────────────────────────────────
     ('lsb_sequential', {'gen_type': 'lsb', 'strategy': 'sequential',
@@ -123,37 +119,28 @@ _STRATEGY_CONFIGS = [
     ('lsb_random', {'gen_type': 'lsb', 'strategy': 'random',
                     'capacity_ratio': 0.25, 'bit_depth': 1}),
     ('lsb_skip', {'gen_type': 'lsb', 'strategy': 'skip',
-                  'capacity_ratio': 0.40, 'bit_depth': 1, 'step': 7,
-                  'edge_threshold': 95}),
-    ('lsb_edge', {'gen_type': 'lsb', 'strategy': 'edge',
-                  'capacity_ratio': 0.21, 'bit_depth': 1,
-                  'edge_threshold': 9}),
+                  'capacity_ratio': 0.40, 'bit_depth': 1, 'step': 7}),
 
-    # ── DCT ──────────────────────────────────────────────────────────────────
+    # ── DCT ──── strength ∈ DCT_STRENGTH_RANGE, capacity ∈ DCT_CAPACITY_RANGE ─
     ('dct_mid', {'gen_type': 'dct', 'coeff_selection': 'mid',
-                 'strength': 1.5, 'capacity_ratio': 0.50}),
+                 'strength': 5.0, 'capacity_ratio': 0.20}),
     ('dct_low_mid', {'gen_type': 'dct', 'coeff_selection': 'low_mid',
-                     'strength': 2.0, 'capacity_ratio': 0.40}),
+                     'strength': 5.0, 'capacity_ratio': 0.13}),
 
-    # ── FFT ──────────────────────────────────────────────────────────────────
+    # ── FFT ──── strength ∈ FFT_STRENGTH_RANGE, capacity ∈ FFT_CAPACITY_RANGE ─
     ('fft_low', {'gen_type': 'fft', 'freq_band': 'low',
-                 'strength': 5.0, 'capacity_ratio': 0.50}),
+                 'strength': 13.0, 'capacity_ratio': 0.05}),
     ('fft_mid', {'gen_type': 'fft', 'freq_band': 'mid',
-                 'strength': 4.0, 'capacity_ratio': 0.30}),
+                 'strength': 13.0, 'capacity_ratio': 0.10}),
     ('fft_high', {'gen_type': 'fft', 'freq_band': 'high',
-                  'strength': 3.0, 'capacity_ratio': 0.25}),
+                  'strength': 13.0, 'capacity_ratio': 0.15}),
 
-    # ── Adaptive — low capacity to match Kaggle's ~0.10 bpp payload ───────────
-    # Jitter ±0.10 gives effective range [0.05, 0.20], centred on Kaggle range.
-    ('adaptive_wow', {'gen_type': 'adaptive', 'adaptive_mode': 'wow',
-                      'sigma_offset': 0.5, 'capacity_ratio': 0.10,
-                      'cost_exponent': 1.2, 'use_diagonal': True}),
+    # ── Adaptive — S-UNIWARD spanning both held-out test payloads ────────────
+    # Jitter ±0.10 gives effective range [0.20, 0.40], covering SUNI_02 (0.20 bpp)
+    # and SUNI_04 (0.40 bpp) — the two canonical test targets.
     ('adaptive_suniward', {'gen_type': 'adaptive', 'adaptive_mode': 'suniward',
-                           'sigma_offset': 0.5, 'capacity_ratio': 0.10,
+                           'sigma_offset': 0.5, 'capacity_ratio': 0.30,
                            'cost_exponent': 1.2, 'use_diagonal': True}),
-    ('adaptive_hugo', {'gen_type': 'adaptive', 'adaptive_mode': 'hugo',
-                       'sigma_offset': 1.0, 'capacity_ratio': 0.10,
-                       'cost_exponent': 1.0, 'use_diagonal': True}),
 ]
 
 
@@ -185,18 +172,15 @@ def _build_adaptive_sampler():
     """
     Adaptive-focus variant: ~80 % of each batch goes to adaptive strategies.
 
-    Adaptive notional AUC = 0.50  →  weight 0.50 each (model knows nothing yet).
-    The two hardest non-adaptive weak spots keep weight ~0.10 to prevent
+    Adaptive notional AUC = 0.50  →  weight 0.50 (model knows nothing yet).
+    The hardest non-adaptive weak spot (fft_low) keeps weight ~0.10 to prevent
     catastrophic forgetting of previously learned strategies.
     Everything else gets the minimum floor (0.02) so they still appear rarely.
     """
     # Notional AUC values for this pass: lower = more batch share
     _auc_overrides = {
-        'adaptive_wow': 0.50,  # → w = 0.50
-        'adaptive_suniward': 0.50,  # → w = 0.50
-        'adaptive_hugo': 0.50,  # → w = 0.50
-        'lsb_edge': 0.90,  # → w = 0.10  (hardest existing weak spot)
-        'fft_low': 0.90,  # → w = 0.10  (second hardest)
+        'adaptive_suniward': 0.50,  # → w = 0.50  (the adaptive focus target)
+        'fft_low': 0.90,  # → w = 0.10  (hardest non-adaptive weak spot)
     }
 
     names, configs, weights = [], [], []
@@ -278,15 +262,21 @@ def _generate_pair(args):
             cover_img, output_size=(256, 256))
         cover_crop = TF.crop(cover_img, i_c, j_c, h_c, w_c)
 
-        # Randomise capacity within ±0.10 of the reference config to keep variety
+        # Randomise capacity within ±0.10 of the reference config to keep
+        # variety, clipped to the method's own bits-per-pixel range.
         cfg_used = config.copy()
         base_cap = config.get('capacity_ratio', 0.5)
-        min_cap = (cfg.ADAPTIVE_MIN_CAPACITY
-                   if config.get('gen_type') == 'adaptive'
-                   else cfg.MIN_CAPACITY)
+        gt = config.get('gen_type')
+        if gt == 'lsb':
+            lo_cap, hi_cap = cfg.LSB_CAPACITY_RANGE
+        elif gt == 'dct':
+            lo_cap, hi_cap = cfg.DCT_CAPACITY_RANGE
+        elif gt == 'fft':
+            lo_cap, hi_cap = cfg.FFT_CAPACITY_RANGE
+        else:  # adaptive
+            lo_cap, hi_cap = cfg.ADAPTIVE_MIN_CAPACITY, cfg.MAX_CAPACITY
         cfg_used['capacity_ratio'] = float(np.clip(
-            base_cap + random.uniform(-0.10, 0.10),
-            min_cap, cfg.MAX_CAPACITY))
+            base_cap + random.uniform(-0.10, 0.10), lo_cap, hi_cap))
 
         stego_arr, _ = unified_gen.generate_stego(cover_crop, None, cfg_used)
         if stego_arr is None:
@@ -526,8 +516,8 @@ def _parse_args():
                    help=f'Number of epochs (default: {FT_EPOCHS} standard, '
                         f'{ADAPTIVE_FOCUS_EPOCHS} adaptive-focus)')
     p.add_argument('--adaptive-focus', action='store_true',
-                   help='Dedicate ~80%% of each batch to adaptive strategies '
-                        '(wow/suniward/hugo) with no backbone freeze. '
+                   help='Dedicate ~80%% of each batch to S-UNIWARD adaptive stego '
+                        'with no backbone freeze. '
                         f'Recommended: --epochs {ADAPTIVE_FOCUS_EPOCHS}. '
                         'Saves to srnet_adaptive_best.pth.')
     return p.parse_args()

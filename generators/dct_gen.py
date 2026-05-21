@@ -6,7 +6,7 @@ single batch of NumPy/SciPy calls with no Python loops over pixels or blocks.
 
 Genome parameters:
     gen_type:         'dct'
-    capacity_ratio:   float  — fraction of 8×8 blocks to modify
+    capacity_ratio:   float  — payload in TRUE bits-per-pixel (bpp)
     coeff_selection:  'mid' | 'low_mid' | 'random'
     strength:         float 1.0–8.0 — quantization step size
 """
@@ -122,7 +122,10 @@ class DCTGenerator(BaseGenerator):
         # ---- Select which blocks and which coefficients to embed in ----
         coeff_positions = self._get_coeff_positions(coeff_selection)  # list of (r,c) tuples
         bits_per_block  = len(coeff_positions)
-        target_blocks   = max(1, int(n_blocks * capacity_ratio))
+        # capacity_ratio is TRUE bits-per-pixel: bits = bpp·H·W, blocks =
+        # bits / bits_per_block, capped at the number of available blocks.
+        target_blocks   = max(1, min(n_blocks,
+                                     int(capacity_ratio * h * w / bits_per_block)))
         total_bits      = target_blocks * bits_per_block
 
         # Generate / prepare bits.

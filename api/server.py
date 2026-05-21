@@ -165,7 +165,7 @@ def _infer_method_hint(verdict: str, scores: list) -> Optional[str]:
     if verdict == "CLEAN" or len(scores) < 2:
         return None
     spread = max(scores) - (sum(scores) / len(scores))
-    return "lsb_edge" if spread > 0.3 else "fft_mid"
+    return "lsb_sequential" if spread > 0.3 else "fft_mid"
 
 
 # ── Artefact helpers ──────────────────────────────────────────────────────────
@@ -294,14 +294,6 @@ _STRATEGY_CONFIGS = {
         "strategy":       "sequential",
         "bit_depth":      1,
         "step":           1,
-        "edge_threshold": 0,
-        "message":        _DEFAULT_MESSAGE,
-    },
-    "lsb_edge": {
-        "gen_type":       "lsb",
-        "strategy":       "edge",
-        "edge_threshold": 9,
-        "bit_depth":      1,
         "message":        _DEFAULT_MESSAGE,
     },
     "dct_mid": {

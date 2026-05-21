@@ -32,14 +32,17 @@ from models.srnet import SRNet
 
 from training.batch    import build_assigned_pairs, make_fixed_batch
 from training.config   import (
+    ADAPTIVE_CURRICULUM_SCHEDULE,
     BATCH_SIZE,
     CURRICULUM_END,
+    DCT_CAPACITY_RANGE,
     DEVICE,
     EPOCHS,
+    FFT_CAPACITY_RANGE,
     FIXED_BATCH_SIZE,
     GRADIENT_ACCUMULATION_STEPS,
     INITIAL_LR,
-    MIN_CAPACITY,
+    LSB_CAPACITY_RANGE,
     NUM_WORKERS,
 )
 from training.dataset  import create_or_load_split, load_balanced_dataset
@@ -59,17 +62,16 @@ torch.backends.cudnn.allow_tf32       = True
 cudnn.benchmark                       = True
 
 
-def run_training(checkpoint_path='srnet_best_val.pth'):
-    print(f"Starting Hybrid Training Run 16 (reverted SRM + low-capacity adaptive) on {DEVICE}")
-    print("Run 16 changes vs run 15:")
+def run_training(checkpoint_path=None):
+    print(f"Starting Hybrid Training Run 20 (LSB / DCT / FFT / S-UNIWARD) on {DEVICE}")
+    print("Run 20 changes:")
+    print("  Capacity: capacity_ratio is now TRUE bits-per-pixel for ALL generators")
+    print("  EA scope: per-method bpp ranges + strength floors fence the search space")
+    print("  Adaptive: shape-only EA; payload set by ADAPTIVE_CURRICULUM_SCHEDULE")
+    print("  Adaptive enters every batch via the Layer-7 floor, curriculum-paced")
     print("  Architecture: Triple-branch frontend (11 SRM + 53 spatial + 21 FFT = 85 ch)")
-    print("  Branch A: 11 frozen 3x3 KV+edge SRM kernels (spatial only)")
-    print("  Branch B: 53 learnable filters (spatial only — LSB/DCT specialization)")
-    print("  Branch C: 21 learnable filters (FFT only — frequency ring specialization)")
-    print("  Adaptive: WOW / S-UNIWARD / HUGO integrated from epoch 0 (Layer 7 batch floor)")
-    print("  Curriculum: capacity override skipped for adaptive (preserves adaptivity profile)")
-    print("  Label smoothing: 0.1 (threshold calibration fix)")
-    print(f"  CURRICULUM_END: {CURRICULUM_END}")
+    print("  Label smoothing: 0.1")
+    print(f"  CURRICULUM_END: {CURRICULUM_END}  |  EPOCHS: {EPOCHS}")
 
     # ── Data ──────────────────────────────────────────────────────────────────
     lossy_files, lossless_files = load_balanced_dataset('data/raw')
@@ -85,7 +87,7 @@ def run_training(checkpoint_path='srnet_best_val.pth'):
 
     # ── Model ─────────────────────────────────────────────────────────────────
     discriminator = SRNet().to(DEVICE)
-    print("[INFO] Compiling model with torch.compile (reduce-overhead)...")
+    print("[INFO] Compiling model with torch.compile (default)...")
     discriminator = torch.compile(discriminator, mode='default')
 
     optimizer = optim.Adam(discriminator.parameters(), lr=INITIAL_LR, weight_decay=2e-4)
@@ -135,14 +137,13 @@ def run_training(checkpoint_path='srnet_best_val.pth'):
         curriculum_active = blend_factor < 1.0
         track_evolution   = blend_factor > 0.0
 
-        # Curriculum parameter annealing
-        hard_min_capacity  = max(MIN_CAPACITY, 1.0 - (min(epoch, CURRICULUM_END - 1) * 0.08))
-        min_capacity       = hard_min_capacity + blend_factor * (MIN_CAPACITY - hard_min_capacity)
-        hard_max_edge      = min(70, epoch * 7)
-        max_edge_threshold = int(hard_max_edge + blend_factor * (100 - hard_max_edge))
+        # Curriculum capacity annealing — cap_floor is the lower bound (as a
+        # fraction of each method's bpp range) for the warmup capacity override.
+        # 1.0 at epoch 0 (always max payload) → 0.0 by the end of the curriculum.
+        cap_floor = max(0.0, 1.0 - min(epoch, CURRICULUM_END) / CURRICULUM_END)
 
         _print_epoch_header(epoch, current_lr, blend_factor, curriculum_active,
-                            min_capacity, max_edge_threshold)
+                            cap_floor)
 
         random.shuffle(train_lossy)
         random.shuffle(train_lossless)
@@ -155,6 +156,7 @@ def run_training(checkpoint_path='srnet_best_val.pth'):
 
         discriminator.train()
         optimizer.zero_grad()
+        accum_count = 0  # successful backward passes since the last optimizer step
 
         with ThreadPoolExecutor(max_workers=NUM_WORKERS) as executor:
             for step in range(steps_per_epoch):
@@ -172,8 +174,7 @@ def run_training(checkpoint_path='srnet_best_val.pth'):
                 # ── Per-pair generation closure ────────────────────────────
                 def generate_pair(args, _epoch=epoch,
                                   _curriculum=curriculum_active,
-                                  _min_cap=min_capacity,
-                                  _max_edge=max_edge_threshold):
+                                  _cap_floor=cap_floor):
                     path, genome = args
                     try:
                         with Image.open(path) as img:
@@ -183,22 +184,30 @@ def run_training(checkpoint_path='srnet_best_val.pth'):
                         if w < 256 or h < 256:
                             return None
 
-                        i_c, j_c, h_c, w_c = transforms.RandomCrop.get_params(
-                            cover_img, output_size=(256, 256))
-                        cover_crop = TF.crop(cover_img, i_c, j_c, h_c, w_c)
+                        # Resolution augmentation: half the covers are the whole
+                        # image downsampled to 256×256 (matches the downsampled
+                        # BOSSbase test set), half are native-resolution 256 crops
+                        # (matches arbitrary-resolution demo uploads).
+                        if random.random() < 0.5:
+                            cover_crop = cover_img.resize((256, 256), Image.BILINEAR)
+                        else:
+                            i_c, j_c, h_c, w_c = transforms.RandomCrop.get_params(
+                                cover_img, output_size=(256, 256))
+                            cover_crop = TF.crop(cover_img, i_c, j_c, h_c, w_c)
 
                         genome_cfg = genome.copy()
                         gt         = genome_cfg['gen_type']
 
-                        # Curriculum capacity override: skip for adaptive.
-                        # For LSB/DCT/FFT, high capacity = "easy stego, big signal" (good warmup).
-                        # For adaptive, capacity≈1.0 forces lambda→0, makes p_change≈0.5
-                        # everywhere, and erases the adaptivity profile that defines
-                        # WOW/S-UNIWARD/HUGO. Adaptive keeps its genome capacity (0.30–0.50).
-                        if _curriculum and gt != 'adaptive':
-                            genome_cfg['capacity_ratio'] = random.uniform(_min_cap, 1.0)
-                            if gt == 'lsb':
-                                genome_cfg['edge_threshold'] = random.randint(0, _max_edge)
+                        # Adaptive payload is curriculum-controlled, never
+                        # evolved — overridden every epoch from the schedule.
+                        # LSB/DCT/FFT get a curriculum warmup bias toward high
+                        # capacity, sampled within each method's own bpp range.
+                        if gt == 'adaptive':
+                            genome_cfg['capacity_ratio'] = _adaptive_curriculum_payload(_epoch)
+                        elif _curriculum:
+                            lo, hi = _method_capacity_range(gt)
+                            frac   = random.uniform(_cap_floor, 1.0)
+                            genome_cfg['capacity_ratio'] = lo + frac * (hi - lo)
 
                         if gt == 'lsb':
                             genome_cfg['message'] = (
@@ -269,13 +278,18 @@ def run_training(checkpoint_path='srnet_best_val.pth'):
                     loss_accum = loss / GRADIENT_ACCUMULATION_STEPS
 
                 scaler.scale(loss_accum).backward()
+                accum_count += 1
 
-                if (step + 1) % GRADIENT_ACCUMULATION_STEPS == 0:
+                # Step on the COUNT of accumulated backward passes, not the loop
+                # index — a skipped step (the `continue` above) must not desync
+                # the accumulation window and warp the effective gradient scale.
+                if accum_count == GRADIENT_ACCUMULATION_STEPS:
                     scaler.unscale_(optimizer)
                     torch.nn.utils.clip_grad_norm_(discriminator.parameters(), max_norm=1.0)
                     scaler.step(optimizer)
                     scaler.update()
                     optimizer.zero_grad()
+                    accum_count = 0
 
                 # ── Evolutionary stats & accuracy ─────────────────────────
                 _, preds = torch.max(outputs, 1)
@@ -298,9 +312,16 @@ def run_training(checkpoint_path='srnet_best_val.pth'):
                           f"Loss: {loss.item():.4f} | "
                           f"Acc: {100 * correct_total / max(1, total_samples):.1f}%", end="")
 
-        # Final gradient flush
-        if steps_per_epoch % GRADIENT_ACCUMULATION_STEPS != 0:
+        # Final gradient flush — apply whatever partial window is left. The loss
+        # was pre-divided by GRADIENT_ACCUMULATION_STEPS, so a partial window of
+        # `accum_count` backwards is under-scaled; rescale it to full strength.
+        if accum_count > 0:
             scaler.unscale_(optimizer)
+            if accum_count < GRADIENT_ACCUMULATION_STEPS:
+                rescale = GRADIENT_ACCUMULATION_STEPS / accum_count
+                for p in discriminator.parameters():
+                    if p.grad is not None:
+                        p.grad.mul_(rescale)
             torch.nn.utils.clip_grad_norm_(discriminator.parameters(), max_norm=1.0)
             scaler.step(optimizer)
             scaler.update()
@@ -385,14 +406,32 @@ def run_training(checkpoint_path='srnet_best_val.pth'):
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
-def _print_epoch_header(epoch, lr, blend_factor, curriculum_active,
-                        min_capacity, max_edge_threshold):
+def _adaptive_curriculum_payload(epoch: int) -> float:
+    """
+    Sample the adaptive (S-UNIWARD) payload in bpp for this epoch from
+    ADAPTIVE_CURRICULUM_SCHEDULE. The EA never chooses the adaptive payload —
+    it evolves only the cost-model shape.
+    """
+    for up_to_epoch, payloads in ADAPTIVE_CURRICULUM_SCHEDULE:
+        if epoch < up_to_epoch:
+            return random.choice(payloads)
+    return random.choice(ADAPTIVE_CURRICULUM_SCHEDULE[-1][1])
+
+def _method_capacity_range(gen_type: str) -> tuple:
+    """Per-method (min, max) capacity in bpp for the curriculum warmup override."""
+    if gen_type == 'dct':
+        return DCT_CAPACITY_RANGE
+    if gen_type == 'fft':
+        return FFT_CAPACITY_RANGE
+    return LSB_CAPACITY_RANGE
+
+
+def _print_epoch_header(epoch, lr, blend_factor, curriculum_active, cap_floor):
     print(f"\n{'=' * 65}")
     print(f"Epoch {epoch + 1}/{EPOCHS} | LR: {lr:.6f} | Blend: {blend_factor:.2f}")
     if curriculum_active:
         blend_note = (f" (blending {blend_factor*100:.0f}%)" if blend_factor > 0 else "")
-        print(f"Curriculum: Cap [{min_capacity:.2f}-1.0] | "
-              f"Edge [0-{max_edge_threshold}]{blend_note}")
+        print(f"Curriculum: warmup capacity floor {cap_floor*100:.0f}% of range{blend_note}")
     else:
         print("Full evolution — no curriculum constraints.")
     print('=' * 65)
@@ -401,7 +440,7 @@ def _print_epoch_header(epoch, lr, blend_factor, curriculum_active,
 def _run_diagnostic(inputs_t, n_real):
     """Quick sanity-check printed once at the very start of training."""
     print("\n" + "=" * 65)
-    print("DIAGNOSTIC CHECK (Run 13: Triple-Branch)")
+    print("DIAGNOSTIC CHECK (Run 20: Triple-Branch)")
     print("=" * 65)
     real_data = inputs_t[:n_real]
     covers    = real_data[0::2, 0:1, :, :].cpu().numpy()

@@ -9,10 +9,8 @@ import torch
 import training.config as config  # needed for getattr() on dynamic fine-tune overrides
 from training.config import (
     ADAPTIVE_BATCH_FRACTION,
-    ANY_EDGE_BATCH_FRACTION,
     FFT_COMBINED_BATCH_CAP,
     FIXED_BATCH_SIZE,
-    HARD_EDGE_BATCH_FRACTION,
     LOW_CAPACITY_BATCH_FRACTION,
     NICHE_BATCH_CAP,
 )
@@ -21,18 +19,13 @@ from training.genome import get_niche
 
 def build_assigned_pairs(batch_files: list, evo_manager) -> tuple[list, int]:
     """
-    Assign a steganography genome to each cover image path using seven layers
-    of diversity constraints.
+    Assign a steganography genome to each cover image path using layered
+    diversity constraints.
 
-    Layer 1a — Hard edge floor (HARD_EDGE_BATCH_FRACTION = 15 %):
-        lsb_edge with threshold ≤ 9 AND capacity ≤ 0.25 every batch.
+    Layer 2 — Low-capacity floor (15 % of free slots, capacity below
+        LOW_CAPACITY_THRESHOLD = 0.12 bpp).
 
-    Layer 1b — Any edge floor (ANY_EDGE_BATCH_FRACTION = 8 %):
-        Any lsb_edge genome. Combined with 1a ≈ 23 % edge total.
-
-    Layer 2 — Low-capacity floor (15 % of free slots, capacity < 0.30).
-
-    Layer 3 — Per-niche cap (40 % of free slots per niche, 11 niches total).
+    Layer 3 — Per-niche cap (40 % of free slots per niche).
 
     Layer 4 — FFT combined cap (25 % of free slots for all FFT sub-niches).
 
@@ -44,9 +37,8 @@ def build_assigned_pairs(batch_files: list, evo_manager) -> tuple[list, int]:
         Explicit floor for dct_low_mid genomes with strength ≤ 3.5.
         Set in finetune.py to 10 % to target the weak spot.
 
-    Layer 7 — Adaptive floor (ADAPTIVE_BATCH_FRACTION = 15 %):
-        Guarantees all three adaptive sub-niches (wow, suniward, hugo) appear
-        in every batch via round-robin assignment.
+    Layer 7 — Adaptive floor (ADAPTIVE_BATCH_FRACTION):
+        Guarantees S-UNIWARD stego appears in every batch.
 
     Returns:
         (pairs, fallback_count)
@@ -54,43 +46,29 @@ def build_assigned_pairs(batch_files: list, evo_manager) -> tuple[list, int]:
     n = len(batch_files)
 
     # ── Slot allocation ───────────────────────────────────────────────────────
-    n_hard_edge       = max(1, int(n * HARD_EDGE_BATCH_FRACTION))
-    n_any_edge        = max(1, int(n * ANY_EDGE_BATCH_FRACTION))
-    n_edge_total      = n_hard_edge + n_any_edge
     n_fft_lowstrength = max(1, int(n * getattr(config, 'FFT_LOW_LOWSTRENGTH_FRACTION',  0.0)))
     n_dct_lowmid      = max(1, int(n * getattr(config, 'DCT_LOWMID_LOWSTRENGTH_FRACTION', 0.0)))
-    # Layer 7: at least 3 slots so every adaptive mode gets at least one
-    n_adaptive        = max(3, int(n * ADAPTIVE_BATCH_FRACTION))
-    n_free            = n - n_edge_total - n_fft_lowstrength - n_dct_lowmid - n_adaptive
-    n_lowcap          = max(1, int(n_free * LOW_CAPACITY_BATCH_FRACTION))
-    n_normal          = n_free - n_lowcap
+    n_adaptive        = max(1, int(n * ADAPTIVE_BATCH_FRACTION))
+    # Clamp so micro-batches (n < ~8) degrade gracefully — the floors above each
+    # reserve >= 1 slot, which can otherwise underflow n_free / n_normal below 0
+    # and produce nonsense slices. At BATCH_SIZE=64 these clamps never bind.
+    n_free            = max(0, n - n_fft_lowstrength - n_dct_lowmid - n_adaptive)
+    n_lowcap          = (max(1, int(n_free * LOW_CAPACITY_BATCH_FRACTION))
+                         if n_free > 0 else 0)
+    n_normal          = max(0, n_free - n_lowcap)
 
     # ── Path slicing ──────────────────────────────────────────────────────────
     shuffled = random.sample(batch_files, len(batch_files))
     cursor   = 0
 
-    hard_paths       = shuffled[cursor : cursor + n_hard_edge];       cursor += n_hard_edge
-    any_paths        = shuffled[cursor : cursor + n_any_edge];        cursor += n_any_edge
     fft_low_paths    = shuffled[cursor : cursor + n_fft_lowstrength]; cursor += n_fft_lowstrength
     dct_lowmid_paths = shuffled[cursor : cursor + n_dct_lowmid];      cursor += n_dct_lowmid
     adaptive_paths   = shuffled[cursor : cursor + n_adaptive];        cursor += n_adaptive
     lowcap_paths     = shuffled[cursor : cursor + n_lowcap];          cursor += n_lowcap
     normal_paths     = shuffled[cursor:]
 
-    all_edge_genomes = [g for g in evo_manager.population if get_niche(g) == 'lsb_edge']
-    if not all_edge_genomes:
-        all_edge_genomes = [evo_manager._new_lsb("fallback_any_edge", 'edge')]
-
     pairs          = []
     fallback_count = 0
-
-    # Layer 1a — hard edge
-    for path in hard_paths:
-        pairs.append((path, evo_manager.get_hard_edge_genome()))
-
-    # Layer 1b — any edge
-    for path in any_paths:
-        pairs.append((path, random.choice(all_edge_genomes)))
 
     # Layer 5 — FFT-low low-strength
     for path in fft_low_paths:
@@ -100,11 +78,9 @@ def build_assigned_pairs(batch_files: list, evo_manager) -> tuple[list, int]:
     for path in dct_lowmid_paths:
         pairs.append((path, evo_manager.get_lowstrength_dct_lowmid_genome()))
 
-    # Layer 7 — Adaptive floor (round-robin across modes)
-    _adaptive_modes = ['wow', 'suniward', 'hugo']
-    for i, path in enumerate(adaptive_paths):
-        mode = _adaptive_modes[i % len(_adaptive_modes)]
-        pairs.append((path, evo_manager.get_adaptive_genome(mode)))
+    # Layer 7 — Adaptive floor (S-UNIWARD)
+    for path in adaptive_paths:
+        pairs.append((path, evo_manager.get_adaptive_genome('suniward')))
 
     # Layer 2 — low-capacity
     for path in lowcap_paths:

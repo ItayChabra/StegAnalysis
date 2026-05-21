@@ -1,24 +1,25 @@
 """
-adaptive_gen.py — WOW / S-UNIWARD / HUGO steganography generator.
+adaptive_gen.py — S-UNIWARD adaptive steganography generator.
 
-Three selectable embedding modes (set via genome parameter `adaptive_mode`):
+S-UNIWARD (Spatial UNIWARD) embedding — two selectable cost models:
+  canonical=True  : reference additive distortion (Holub & Fridrich 2014)
+      rho = sum_k conv2( 1 / (|conv2(X, F_k)| + 1), rot180(|F_k|) )
+    The directional BACK-convolution is the defining UNIWARD step: it spreads
+    each sub-band coefficient's reciprocal suppressor over the full filter
+    support, summing the relative distortion of every wavelet coefficient a
+    pixel flip perturbs. Fixed σ=1, all three sub-bands weight 1.0, no
+    cost_exponent. Use this for stego that must match canonical (BOSSbase)
+    S-UNIWARD detectors.
+  canonical=False : simplified, evolvable approximation (DEFAULT; A/B baseline)
+      cost = sum_k w_k / (|W_k(cover)| + sigma_offset)
+    Reciprocal of the local Daubechies-8 residual only — NO back-convolution.
+    Smooth regions → high cost; textured/edge regions → low cost. sigma_offset,
+    cost_exponent and the HH weight (0.7) are live EA knobs here.
 
-  'wow'       WOW (Wavelet Obtained Weights)
-              Cost = sum_k 1 / (|W_k * cover| + sigma_offset)
-              Daubechies-8 directional residuals (HL, LH, HH sub-bands).
-              Smooth regions → cost → 1/sigma_offset (high, penalised).
-              Textured/edge regions → cost → 0 (low, preferred for embedding).
+  WOW and HUGO were dropped from scope — S-UNIWARD is the single representative
+  adaptive method, trained and demoed at high payload.
 
-  'suniward'  S-UNIWARD (Spatial UNIWARD)
-              Cost = sum_k 1 / (|W_k(cover)| + sigma_offset)
-              Note: This is the standard simplified implementation used in practice,
-              approximating the relative distortion defined in Holub & Fridrich (2013).
-
-  'hugo'      HUGO-lite (Highly Undetectable steGO)
-              Cost = 1 / (RMS of 1st + 2nd order directional differences + sigma_offset)
-              Approximate Haralick-feature distance in a 5×5 window.
-
-All three modes share:
+Mechanics:
   - Daubechies-8 (length-16) directional filter bank (HL, LH, HH sub-bands)
   - Gibbs-optimal ±1 embedding via numerically-stable λ binary search (expit)
   - Spatial wet border: outermost 8 pixels unembeddable (db8 padding artefact zone)
@@ -26,11 +27,21 @@ All three modes share:
   - Cost floor 1e-3 to prevent lambda-search underflow backdoor on smooth images
 
 Evolvable genome parameters:
-  adaptive_mode   : str 'wow' | 'suniward' | 'hugo'
-  capacity_ratio  : float 0.20–0.75  (expected fraction of pixels changed)
+  adaptive_mode   : str 'suniward'   (only supported mode)
+  capacity_ratio  : float 0.20–0.75  (TRUE payload in bits-per-pixel — see below)
+  canonical       : bool  False      (True → reference cost; ignores the knobs below)
   sigma_offset    : float 0.5–5.0    (cost floor; controls smooth-region penalty)
-  use_diagonal    : bool              (include HH sub-band; WOW/S-UNIWARD only)
+  use_diagonal    : bool             (include HH sub-band)
   cost_exponent   : float 0.5–2.0    (sharpen/flatten cost distribution)
+
+Payload semantics:
+  capacity_ratio is a TRUE bits-per-pixel rate. The ±1 embedder is a
+  payload-limited sender: λ is solved so the total ternary entropy
+  Σ H(p_i) equals capacity_ratio·N (see _find_lambda / _ternary_entropy).
+  This matches reference S-UNIWARD and the BOSSbase 0.2/0.4-bpp test sets.
+  Ternary ±1 embedding caps at 1.5 bpp; requests above that clamp to λ=0.
+  (Earlier revisions treated capacity_ratio as the fraction of pixels
+  changed — ~6-15× more distortion than the same number in bpp.)
 
 Note: No message bits are encoded — output is statistically realistic stego
 for adversarial training, not bit-recoverable steganography.
@@ -39,7 +50,6 @@ for adversarial training, not bit-recoverable steganography.
 import numpy as np
 from PIL import Image
 from scipy.signal import convolve2d
-from scipy.ndimage import uniform_filter
 from scipy.special import expit
 
 from generators.base_generator import BaseGenerator
@@ -66,7 +76,8 @@ _DB8_DEC_HI = np.array([
 _WET_COST    = 1e10               # cost for unembeddable pixels
 _WET_BORDER  = 8                  # spatial border width (pixels) — db8 filter radius
 _COST_FLOOR  = 1e-3               # minimum cost; prevents lambda-search underflow backdoor
-_VALID_MODES = frozenset({'wow', 'suniward', 'hugo'})
+_CANON_SIGMA = 1.0                # canonical S-UNIWARD stabilising constant (fixed)
+_VALID_MODES = frozenset({'suniward'})
 
 
 class AdaptiveGenerator(BaseGenerator):
@@ -106,126 +117,130 @@ class AdaptiveGenerator(BaseGenerator):
             bands.append(HH)
         return bands
 
-    # ------------------------------------------------------------------ WOW cost
+    @staticmethod
+    def _db8_directional_filters_2d():
+        """The three db8 directional 2-D filters as outer products: LH, HL, HH.
 
-    def _compute_wow_cost(self, img_f, use_diagonal=True,
-                          sigma_offset=1.0, cost_exponent=1.0):
+        Same sub-band geometry as _db8_subbands, but materialised as full 2-D
+        kernels so the canonical back-convolution can use |F_k| over the whole
+        16×16 support.
         """
-        WOW: cost_i = sum_k  1 / (|r_k(i)| + sigma_offset)
-
-        Reciprocal weighting over db8 directional sub-bands.
-        Smooth regions: residuals ≈ 0 → cost → 1/sigma_offset (high).
-        Textured regions: large residuals → cost → 0 (preferred for embedding).
-        """
-        cost = np.zeros_like(img_f, dtype=np.float64)
-        for band in self._db8_subbands(img_f, use_diagonal):
-            cost += 1.0 / (np.abs(band) + sigma_offset)
-
-        if cost_exponent != 1.0:
-            cost = cost ** cost_exponent
-
-        cost += _COST_FLOOR
-        if not np.all(cost > 0):
-            raise RuntimeError(f"cost has non-positive entries (min={cost.min():.3g})")
-        return cost
+        lo, hi = _DB8_DEC_LO, _DB8_DEC_HI
+        return [np.outer(lo, hi), np.outer(hi, lo), np.outer(hi, hi)]
 
     # ------------------------------------------------------------------ S-UNIWARD cost
 
-    def _compute_suniward_cost(self, img_f, use_diagonal=True,
+    def _compute_suniward_cost_canonical(self, img_f):
+        """Canonical spatial S-UNIWARD additive distortion (Holub & Fridrich 2014).
+
+            rho = sum_k  conv2( 1 / (|conv2(X, F_k)| + σ),  rot180(|F_k|) ),   σ = 1
+
+        The second (back-)convolution is the defining UNIWARD step the simplified
+        cost omits: it spreads each sub-band coefficient's reciprocal suppressor
+        over the full filter support, summing the relative distortion of every
+        wavelet coefficient a pixel flip perturbs.
+
+        Reference-faithful fingerprint: symmetric padding by the filter length,
+        zero-boundary 'same' convolutions, the even-length circshift correction
+        (db8 = 16 taps → shift by 1 in each axis), then crop to original size.
+        All three sub-bands weighted 1.0; no cost_exponent.
+        """
+        H, W    = img_f.shape
+        filters = self._db8_directional_filters_2d()
+        pad     = filters[0].shape[0]                  # 16 = filter length
+        padded  = np.pad(img_f, pad, mode='symmetric')
+        rho     = np.zeros_like(padded)
+
+        for Fk in filters:
+            absF = np.abs(Fk)
+            R    = convolve2d(padded, Fk, mode='same', boundary='fill')
+            S    = 1.0 / (np.abs(R) + _CANON_SIGMA)
+            xi   = convolve2d(S, np.rot90(absF, 2), mode='same', boundary='fill')
+            # Even-length filters (db8 = 16) carry a half-pixel offset; the
+            # reference circshifts xi by 1 in each axis to realign the grid.
+            if Fk.shape[0] % 2 == 0:
+                xi = np.roll(xi, 1, axis=0)
+            if Fk.shape[1] % 2 == 0:
+                xi = np.roll(xi, 1, axis=1)
+            rho += xi
+
+        return rho[pad:pad + H, pad:pad + W]
+
+    def _compute_suniward_cost(self, img_f, canonical=False, use_diagonal=True,
                                sigma_offset=1.0, cost_exponent=1.0):
-        weights = [1.0, 1.0, 0.7] if use_diagonal else [1.0, 1.0]
-        cost = np.zeros_like(img_f, dtype=np.float64)
-        for w, wb in zip(weights, self._db8_subbands(img_f, use_diagonal)):
-            cost += w / (np.abs(wb) + sigma_offset)
-        if cost_exponent != 1.0:
-            cost = cost ** cost_exponent
+        """Per-pixel S-UNIWARD embedding cost.
+
+        canonical=True  → reference additive distortion (back-convolution, σ=1,
+                          all sub-bands weight 1, no exponent) — the version that
+                          transfers to canonical S-UNIWARD detectors.
+        canonical=False → the simplified, evolvable approximation (reciprocal of
+                          the local residual; sigma_offset / cost_exponent /
+                          HH-weight are live knobs). Kept for A/B testing.
+        """
+        if canonical:
+            cost = self._compute_suniward_cost_canonical(img_f)
+        else:
+            weights = [1.0, 1.0, 0.7] if use_diagonal else [1.0, 1.0]
+            cost = np.zeros_like(img_f, dtype=np.float64)
+            for w, wb in zip(weights, self._db8_subbands(img_f, use_diagonal)):
+                cost += w / (np.abs(wb) + sigma_offset)
+            if cost_exponent != 1.0:
+                cost = cost ** cost_exponent
+        cost = np.where(np.isfinite(cost), cost, _WET_COST)
         cost += _COST_FLOOR
         if not np.all(cost > 0):
             raise RuntimeError(f"suniward cost invalid (min={cost.min():.3g})")
         return cost
 
-    # ------------------------------------------------------------------ HUGO cost
-
-    def _compute_hugo_cost(self, img_f, sigma_offset=1.0, cost_exponent=1.0):
-        """
-        HUGO-lite: cost based on combined 1st + 2nd order directional difference norms.
-
-        1st-order: 8-connected pixel differences (local gradient)
-        2nd-order: Laplacian-like differences in H, V, and 2 diagonal directions
-                   d2[i,j] = x[i,j+1] - 2*x[i,j] + x[i,j-1]  (and rotations)
-
-        Together these approximate SPAM feature sensitivity — the key statistical
-        property that makes HUGO distinct from WOW/S-UNIWARD. Full HUGO uses
-        co-occurrence histograms; this captures the same local complexity signal
-        per-pixel without histogram computation.
-        """
-        h, w = img_f.shape
-        pad1 = np.pad(img_f, 1, mode='symmetric')  # (h+2, w+2)
-        pad2 = np.pad(img_f, 2, mode='symmetric')  # (h+4, w+4)
-
-        # ---- First-order: 8-directional pixel differences ---------------------
-        diffs_1st = np.stack([
-            img_f - pad1[0:h, 1:w + 1],  # N
-            img_f - pad1[2:h + 2, 1:w + 1],  # S
-            img_f - pad1[1:h + 1, 0:w],  # W
-            img_f - pad1[1:h + 1, 2:w + 2],  # E
-            img_f - pad1[0:h, 0:w],  # NW
-            img_f - pad1[0:h, 2:w + 2],  # NE
-            img_f - pad1[2:h + 2, 0:w],  # SW
-            img_f - pad1[2:h + 2, 2:w + 2],  # SE
-        ], axis=0)  # (8, H, W)
-
-        # ---- Second-order: finite 2nd derivatives in 4 directions -------------
-        # Indexing: img_f == pad2[2:h+2, 2:w+2]
-        d2_h = pad2[2:h + 2, 3:w + 3] - 2 * img_f + pad2[2:h + 2, 1:w + 1]  # horizontal
-        d2_v = pad2[3:h + 3, 2:w + 2] - 2 * img_f + pad2[1:h + 1, 2:w + 2]  # vertical
-        d2_d1 = pad2[3:h + 3, 3:w + 3] - 2 * img_f + pad2[1:h + 1, 1:w + 1]  # NW-SE diagonal
-        d2_d2 = pad2[1:h + 1, 3:w + 3] - 2 * img_f + pad2[3:h + 3, 1:w + 1]  # NE-SW diagonal
-        diffs_2nd = np.stack([d2_h, d2_v, d2_d1, d2_d2], axis=0)  # (4, H, W)
-
-        # ---- Combined L2 feature magnitude (12 components) -------------------
-        all_diffs = np.concatenate([diffs_1st, diffs_2nd], axis=0)  # (12, H, W)
-        feature_mag = np.sqrt((all_diffs ** 2).mean(axis=0))  # (H, W)
-
-        # Low feature_mag → homogeneous → high cost (avoid embedding there)
-        cost = uniform_filter(1.0 / (feature_mag + sigma_offset), size=3)
-
-        if cost_exponent != 1.0:
-            cost = cost ** cost_exponent
-
-        cost += _COST_FLOOR
-
-        if not np.all(cost > 0):
-            raise RuntimeError(f"hugo cost invalid (min={cost.min():.3g})")
-
-        return cost
-
     # ------------------------------------------------------------------ lambda search
 
-    def _find_lambda(self, cost, payload):
+    @staticmethod
+    def _ternary_entropy(p):
         """
-        Binary search for λ s.t.  Σ_i expit(-λ·ρ_i) == payload * N.
+        Payload (bits/pixel) carried by a ±1 embedder at per-pixel change
+        probability p — i.e. P(+1)=P(-1)=p/2, P(0)=1-p:
 
-        Uses scipy.special.expit throughout — no raw exp() calls, no overflow risk.
+            H(p) = -p·log2(p/2) - (1-p)·log2(1-p)
+
+        Monotonically increasing in p over p∈[0, 0.5]; peaks at H(0.5)=1.5.
+        Vectorised; clipped so p=0 / p=1 stay finite (H→0).
+        """
+        p = np.clip(np.asarray(p, dtype=np.float64), 1e-12, 1.0 - 1e-12)
+        q = 1.0 - p
+        return -p * np.log2(p / 2.0) - q * np.log2(q)
+
+    def _find_lambda(self, cost, payload_bpp):
+        """
+        Binary-search λ ≥ 0 so the embedded payload equals payload_bpp:
+
+            Σ_i H( expit(-λ·ρ_i) )  ==  payload_bpp · N
+
+        H is the ternary entropy (_ternary_entropy), so payload_bpp is a TRUE
+        bits-per-pixel rate — matching reference S-UNIWARD and the BOSSbase
+        0.2/0.4-bpp test sets. Σ H is monotonically decreasing in λ.
+
         Called on feasible pixels only (wet pixels excluded before this call).
-        Returns λ=0 if payload ≥ 0.5 (trivially achievable without any push).
+        Ternary ±1 embedding caps at 1.5 bpp (λ=0), so payload_bpp ≥ 1.5
+        returns λ=0. Uses scipy.special.expit throughout — no raw exp(),
+        no overflow risk.
         """
-        n = cost.size
-        target = payload * n
+        n      = cost.size
+        target = payload_bpp * n
 
-        if n * 0.5 <= target:
+        # λ=0 → every pixel carries H(0.5)=1.5 bits, the ceiling.
+        if target >= 1.5 * n:
             return 0.0
 
         lo, hi = 0.0, 50.0
         with np.errstate(over='ignore', under='ignore'):
             for _ in range(14):
-                if expit(-hi * cost).sum() <= target:
+                if self._ternary_entropy(expit(-hi * cost)).sum() <= target:
                     break
                 hi *= 2.0
 
-            for _ in range(24):
+            for _ in range(32):
                 lam = (lo + hi) / 2.0
-                if expit(-lam * cost).sum() > target:
+                if self._ternary_entropy(expit(-lam * cost)).sum() > target:
                     lo = lam
                 else:
                     hi = lam
@@ -236,11 +251,14 @@ class AdaptiveGenerator(BaseGenerator):
 
     def embed(self, cover_input, output_path=None, seed=None, **params):
         """
-        Embed a payload using WOW / S-UNIWARD / HUGO cost model.
+        Embed a payload using the S-UNIWARD cost model.
 
         Params (genome keys):
-            adaptive_mode   : 'wow' | 'suniward' | 'hugo'   (default 'wow')
-            capacity_ratio  : float  (default 0.2)
+            adaptive_mode   : 'suniward'   (only supported mode)
+            capacity_ratio  : float  payload in bits-per-pixel (default 0.2)
+            canonical       : bool   reference cost w/ back-convolution (default False);
+                                     when True, sigma_offset/use_diagonal/cost_exponent
+                                     are ignored (σ=1, all sub-bands, exponent 1)
             sigma_offset    : float  (default 1.0)
             use_diagonal    : bool   (default True)
             cost_exponent   : float  (default 1.0)
@@ -254,36 +272,35 @@ class AdaptiveGenerator(BaseGenerator):
         except Exception:
             return None, 0
 
-        img_f   = img.astype(np.float64)
-        mode    = params.get('adaptive_mode', 'wow')
-        sig_off = params.get('sigma_offset',  1.0)
-        diag    = params.get('use_diagonal',  True)
-        exp_    = params.get('cost_exponent', 1.0)
+        img_f     = img.astype(np.float64)
+        mode      = params.get('adaptive_mode', 'suniward')
+        sig_off   = params.get('sigma_offset',  1.0)
+        diag      = params.get('use_diagonal',  True)
+        exp_      = params.get('cost_exponent', 1.0)
+        canonical = bool(params.get('canonical', False))
 
         if mode not in _VALID_MODES:
             raise ValueError(
                 f"adaptive_mode must be one of {sorted(_VALID_MODES)}, got {mode!r}")
-        if not (0.5 <= exp_ <= 2.0):
+        if not canonical and not (0.5 <= exp_ <= 2.0):
             raise ValueError(f"cost_exponent must be in [0.5, 2.0], got {exp_!r}")
 
-        # ---- Compute 2-D cost map ----------------------------------------
-        if mode == 'suniward':
-            cost_2d = self._compute_suniward_cost(
-                img_f, use_diagonal=diag, sigma_offset=sig_off, cost_exponent=exp_)
-        elif mode == 'hugo':
-            cost_2d = self._compute_hugo_cost(
-                img_f, sigma_offset=sig_off, cost_exponent=exp_)
-        else:
-            cost_2d = self._compute_wow_cost(
-                img_f, use_diagonal=diag, sigma_offset=sig_off, cost_exponent=exp_)
+        # ---- Compute 2-D cost map (S-UNIWARD) ----------------------------
+        cost_2d = self._compute_suniward_cost(
+            img_f, canonical=canonical, use_diagonal=diag,
+            sigma_offset=sig_off, cost_exponent=exp_)
 
         # ---- Wet border: spatial edges (db8 padding artefacts) + saturation --
+        # Canonical S-UNIWARD embeds everywhere (symmetric-padded convolution),
+        # so it gets NO hard spatial border — only the 0/255 saturation guard
+        # below. The simplified mode keeps the db8 padding-artefact border.
         h, w = img_f.shape
-        b = max(1, min(_WET_BORDER, min(h, w) // 16))
-        cost_2d[:b, :]  = _WET_COST
-        cost_2d[-b:, :] = _WET_COST
-        cost_2d[:, :b]  = _WET_COST
-        cost_2d[:, -b:] = _WET_COST
+        if not canonical:
+            b = max(1, min(_WET_BORDER, min(h, w) // 16))
+            cost_2d[:b, :]  = _WET_COST
+            cost_2d[-b:, :] = _WET_COST
+            cost_2d[:, :b]  = _WET_COST
+            cost_2d[:, -b:] = _WET_COST
 
         flat_img  = img.flatten().astype(np.int32)
         flat_cost = cost_2d.flatten().copy()
@@ -291,12 +308,12 @@ class AdaptiveGenerator(BaseGenerator):
         flat_cost[(flat_img == 0) | (flat_img == 255)] = _WET_COST
 
         # ---- Find λ and compute per-pixel change probabilities --------------
-        payload = params.get('capacity_ratio', 0.2)
+        payload_bpp = params.get('capacity_ratio', 0.2)
         feasible_mask = flat_cost < (_WET_COST * 0.5)
         if feasible_mask.sum() == 0:
             return img.copy(), float('inf')
 
-        lam = self._find_lambda(flat_cost[feasible_mask], payload)
+        lam = self._find_lambda(flat_cost[feasible_mask], payload_bpp)
         with np.errstate(over='ignore', under='ignore'):
             p_change = np.clip(expit(-lam * flat_cost), 1e-8, 1 - 1e-8)
 

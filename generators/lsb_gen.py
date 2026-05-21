@@ -7,14 +7,6 @@ class LSBGenerator(BaseGenerator):
     def __init__(self, target_size=(256, 256)):
         self.target_size = target_size
 
-    def _get_complex_areas(self, img_array, threshold):
-        """Returns indices of pixels that are on edges/textures."""
-        img_f = img_array.astype(float)
-        dx = np.diff(img_f, axis=1, append=0)
-        dy = np.diff(img_f, axis=0, append=0)
-        magnitude = np.sqrt(dx ** 2 + dy ** 2)
-        return np.where(magnitude.flatten() > threshold)[0]
-
     def _text_to_bits(self, text):
         """Helper: Converts string to numpy array of bits."""
         b = text.encode('utf-8')
@@ -59,7 +51,6 @@ class LSBGenerator(BaseGenerator):
         strategy       = params.get('strategy', 'random')
         step           = params.get('step', 1)
         bit_depth      = params.get('bit_depth', 1)
-        edge_threshold = params.get('edge_threshold', 0)
         message        = params.get('message', None)
         capacity_ratio = params.get('capacity_ratio', 0.5)
 
@@ -68,13 +59,11 @@ class LSBGenerator(BaseGenerator):
                           strategy=strategy,
                           step=step,
                           bit_depth=bit_depth,
-                          edge_threshold=edge_threshold,
                           capacity_ratio=capacity_ratio)
 
     def embed(self, cover_input, output_path, message=None,
               strategy='random', step=1,
-              bit_depth=1, edge_threshold=0,
-              capacity_ratio=0.5):
+              bit_depth=1, capacity_ratio=0.5):
         """
         cover_input: str (file path), PIL.Image, or np.ndarray.
                      Accepts all three so callers never need to write a temp
@@ -92,21 +81,7 @@ class LSBGenerator(BaseGenerator):
         target_pixels = max(1, int(total_pixels * capacity_ratio))
 
         # 2. Strategy Selection — each branch is fully self-contained.
-        if strategy == 'edge':
-            candidate_indices = (
-                self._get_complex_areas(img_array, edge_threshold)
-                if edge_threshold > 0
-                else np.arange(total_pixels)
-            )
-            if len(candidate_indices) < target_pixels:
-                img_f = img_array.astype(float)
-                dx = np.diff(img_f, axis=1, append=0)
-                dy = np.diff(img_f, axis=0, append=0)
-                flat_mag = np.sqrt(dx ** 2 + dy ** 2).flatten()
-                candidate_indices = np.argpartition(flat_mag, -target_pixels)[-target_pixels:]
-            chosen_indices = np.random.choice(candidate_indices, target_pixels, replace=False)
-
-        elif strategy == 'random':
+        if strategy == 'random':
             chosen_indices = np.random.choice(total_pixels, target_pixels, replace=False)
 
         elif strategy == 'skip':
