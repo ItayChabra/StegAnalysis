@@ -15,6 +15,7 @@ AGGREGATION MODES (aggregate_scores)
   'p80'  — 80th-percentile window score. Middle ground.
 """
 
+import argparse
 import glob
 import math
 import os
@@ -28,7 +29,9 @@ from models.srnet import SRNet
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
-MODEL_CHECKPOINT = 'srnet_ft_epoch_15.pth'
+# Defaults — both overridable on the command line (--checkpoint / --images).
+MODEL_CHECKPOINT = 'srnet_best_val.pth'
+N_IMAGES         = 200   # images scored per folder; lower = faster checkpoint sweep
 DEVICE           = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # A deployable detector uses ONE aggregation mode and ONE threshold for every
@@ -47,17 +50,19 @@ RAW_DIR    = '/home/linuxu/PycharmProjects/StegAnalysis/data/raw'
 
 # Per-folder configuration for the benchmark.
 # 'label' — 0 for Covers (expecting 0% detection), 1 for Stego (expecting 100%).
-# 'group' — 'cover' | 'basic' (LSB/DCT/FFT) | 'adaptive' (WOW/S-UNIWARD/HUGO);
+# 'group' — 'cover' | 'basic' (LSB/DCT/FFT) | 'adaptive' (S-UNIWARD);
 #           used to break the threshold sweep down by difficulty class.
+NEW_SUNI_DIR = os.path.join(KAGGLE_DIR, 'New_S-UNIWARD')
+
 TEST_TARGETS = [
     # ── COVERS (Expected: Clean / 0% Stego) ──────────────────────────────────
     {'name': 'BOSS & BOWS2',  'path': os.path.join(RAW_DIR, 'BossBase and BOWS2'),  'label': 0, 'group': 'cover'},
     {'name': 'Flickr30k',     'path': os.path.join(RAW_DIR, 'flickr30k'),           'label': 0, 'group': 'cover'},
+    {'name': 'BOSSbase_256',  'path': os.path.join(NEW_SUNI_DIR, 'BOSSbase_256'),   'label': 0, 'group': 'cover'},
 
-    # ── SPATIAL / ADAPTIVE STEGO (Expected: 100% Stego) ──────────────────────
-    {'name': 'HUGO',          'path': os.path.join(KAGGLE_DIR, 'HUGO'),             'label': 1, 'group': 'adaptive'},
-    {'name': 'S-UNIWARD',     'path': os.path.join(KAGGLE_DIR, 'S-UNIWARD'),        'label': 1, 'group': 'adaptive'},
-    {'name': 'WOW',           'path': os.path.join(KAGGLE_DIR, 'WOW'),              'label': 1, 'group': 'adaptive'},
+    # ── ADAPTIVE STEGO — held-out S-UNIWARD, BOSSbase 256×256, 0.2/0.4 bpp ────
+    {'name': 'S-UNIWARD 0.2', 'path': os.path.join(NEW_SUNI_DIR, 'SUNI_02'),        'label': 1, 'group': 'adaptive'},
+    {'name': 'S-UNIWARD 0.4', 'path': os.path.join(NEW_SUNI_DIR, 'SUNI_04'),        'label': 1, 'group': 'adaptive'},
 
     # ── BASIC STEGO (Expected: 100% Stego) ───────────────────────────────────
     {'name': 'LSB',           'path': os.path.join(KAGGLE_DIR, 'lsb'),              'label': 1, 'group': 'basic'},
@@ -183,35 +188,44 @@ def aggregate_per_image(results: dict, mode: str) -> dict:
 
 def sweep_rows(scored: dict) -> list:
     """Sweep the decision threshold and return rows of
-    (thresh, TNR, TPR_basic, TPR_adapt, TPR_all, balanced_acc, Youden_J)."""
-    def pool(group):
-        return np.array([s for r in scored.values()
-                         if r['group'] == group for s in r['scores']])
+    (thresh, TNR, TPR_basic, TPR_adapt, bal_acc, Youden_J, TPR_lsb, TPR_dct, TPR_fft).
 
-    cover    = pool('cover')
-    basic    = pool('basic')
-    adaptive = pool('adaptive')
-    parts    = [a for a in (basic, adaptive) if a.size]
-    stego    = np.concatenate(parts) if parts else np.array([])
+    Balanced accuracy is basic-driven: (TNR + TPR_basic) / 2.
+    Adaptive is shown as an informational column only.
+    """
+    def get_target_scores(target_name):
+        if target_name in scored:
+            return np.array(scored[target_name]['scores'])
+        return np.array([])
 
-    if not cover.size or not stego.size:
+    cover_pool = np.array([s for r in scored.values() if r['group'] == 'cover' for s in r['scores']])
+    basic_pool = np.array([s for r in scored.values() if r['group'] == 'basic' for s in r['scores']])
+    s_lsb  = get_target_scores('LSB')
+    s_dct  = get_target_scores('DCT')
+    s_fft  = get_target_scores('FFT')
+    s_suni = np.concatenate([get_target_scores('S-UNIWARD 0.2'), get_target_scores('S-UNIWARD 0.4')])
+
+    if not cover_pool.size or not basic_pool.size:
         return []
 
     rows = []
     for t in np.arange(0.30, 0.8001, 0.05):
         t     = round(float(t), 3)
-        tnr   = float((cover    <  t).mean() * 100)
-        t_bas = float((basic    >= t).mean() * 100) if basic.size    else 0.0
-        t_ada = float((adaptive >= t).mean() * 100) if adaptive.size else 0.0
-        t_all = float((stego    >= t).mean() * 100)
-        rows.append((t, tnr, t_bas, t_ada, t_all,
-                     (tnr + t_all) / 2, tnr + t_all - 100))
+        tnr   = float((cover_pool <  t).mean() * 100)
+        t_bas = float((basic_pool >= t).mean() * 100)
+        t_ada = float((s_suni     >= t).mean() * 100) if s_suni.size else 0.0
+        t_lsb = float((s_lsb     >= t).mean() * 100) if s_lsb.size  else 0.0
+        t_dct = float((s_dct     >= t).mean() * 100) if s_dct.size  else 0.0
+        t_fft = float((s_fft     >= t).mean() * 100) if s_fft.size  else 0.0
+        bal   = (tnr + t_bas) / 2
+        yj    = tnr + t_bas - 100
+        rows.append((t, tnr, t_bas, t_ada, bal, yj, t_lsb, t_dct, t_fft))
     return rows
 
 
 def report_mode(results: dict, mode: str):
     """Print per-target score distributions and the threshold sweep for *mode*.
-    Returns (mode, best_row) where best_row maximises balanced accuracy."""
+    Returns (mode, (thresh, tnr, t_bas, t_ada, bal)) where bal = (TNR+TPR_basic)/2."""
     scored = aggregate_per_image(results, mode)
 
     print("=" * 80)
@@ -229,35 +243,35 @@ def report_mode(results: dict, mode: str):
         print("  [sweep skipped — need both cover and stego results]")
         return mode, None
 
-    best = max(rows, key=lambda r: r[5])
-    print(f"\n  {'thresh':>7} | {'TNR':>7} | {'TPR basic':>10} | "
-          f"{'TPR adapt':>10} | {'TPR all':>8} | {'bal-acc':>8} | {'Youden':>7}")
+    best = max(rows, key=lambda r: r[4])
+    print(f"\n  {'thresh':>7} | {'TNR':>7} | {'TPR bas':>8} | {'TPR ada':>8} | "
+          f"{'bal-acc':>8} | {'LSB':>7} | {'DCT':>7} | {'FFT':>7}")
     print("  " + "-" * 74)
-    for (t, tnr, t_bas, t_ada, t_all, bal, yj) in rows:
-        mark = '  <-- best bal-acc' if t == best[0] else ''
-        print(f"  {t:>7.2f} | {tnr:>6.1f}% | {t_bas:>9.1f}% | {t_ada:>9.1f}% | "
-              f"{t_all:>7.1f}% | {bal:>7.1f}% | {yj:>6.1f}{mark}")
+    for (t, tnr, t_bas, t_ada, bal, yj, t_lsb, t_dct, t_fft) in rows:
+        mark = '  <-- best' if t == best[0] else ''
+        print(f"  {t:>7.2f} | {tnr:>6.1f}% | {t_bas:>7.1f}% | {t_ada:>7.1f}% | "
+              f"{bal:>7.1f}% | {t_lsb:>6.1f}% | {t_dct:>6.1f}% | {t_fft:>6.1f}%{mark}")
     print()
-    return mode, best
+    return mode, (best[0], best[1], best[2], best[3], best[4])
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-def main():
+def main(checkpoint_path=MODEL_CHECKPOINT, n_images=N_IMAGES):
     print(f"Loading SRNet on {DEVICE}...")
     model = SRNet().to(DEVICE)
 
-    if not os.path.exists(MODEL_CHECKPOINT):
-        print(f"ERROR: Could not find {MODEL_CHECKPOINT}.")
+    if not os.path.exists(checkpoint_path):
+        print(f"ERROR: Could not find {checkpoint_path}.")
         return
 
-    checkpoint = torch.load(MODEL_CHECKPOINT, map_location=DEVICE, weights_only=True)
+    checkpoint = torch.load(checkpoint_path, map_location=DEVICE, weights_only=True)
     state_dict = checkpoint.get('model_state_dict', checkpoint)
     # Strip torch.compile prefix if present
     state_dict = {k.replace('_orig_mod.', ''): v for k, v in state_dict.items()}
     model.load_state_dict(state_dict)
-    print(f"Weights loaded. Checkpoint val_acc: {checkpoint.get('val_acc', '?')}")
-    print(f"Comparing aggregation modes: {', '.join(AGG_MODES)}\n")
+    print(f"Checkpoint: {checkpoint_path}  (saved val_acc: {checkpoint.get('val_acc', '?')})")
+    print(f"Images per folder: {n_images}  |  Aggregation modes: {', '.join(AGG_MODES)}\n")
     model.eval()
 
     to_tensor = transforms.ToTensor()
@@ -272,7 +286,7 @@ def main():
             print(f"[Skipped] Directory not found: {folder}")
             continue
 
-        images = sorted(glob.glob(os.path.join(folder, '*.*')))[:200]
+        images = sorted(glob.glob(os.path.join(folder, '*.*')))[:n_images]
         if not images:
             print(f"[Skipped] No files found in {folder}")
             continue
@@ -292,6 +306,11 @@ def main():
         if per_image_windows:
             results[name] = {'windows': per_image_windows,
                              'label': label, 'group': group}
+            # Per-target readout so each check reports as soon as it finishes.
+            for mode in AGG_MODES:
+                s = np.array([aggregate_scores(w, mode) for w in per_image_windows])
+                print(f"  {mode:>5}: min {s.min():.3f}  median {np.median(s):.3f}  "
+                      f"mean {s.mean():.3f}  max {s.max():.3f}")
 
     if not results:
         print("\nNo results — nothing to report.")
@@ -309,15 +328,23 @@ def main():
         print(f"  {'mode':>6} | {'thresh':>7} | {'TNR':>7} | {'TPR basic':>10} | "
               f"{'TPR adapt':>10} | {'bal-acc':>8}")
         print("  " + "-" * 64)
-        for (m, b) in sorted(valid, key=lambda mb: mb[1][5], reverse=True):
+        for (m, b) in sorted(valid, key=lambda mb: mb[1][4], reverse=True):
             print(f"  {m:>6} | {b[0]:>7.2f} | {b[1]:>6.1f}% | {b[2]:>9.1f}% | "
-                  f"{b[3]:>9.1f}% | {b[5]:>7.1f}%")
-        best_mode, best_row = max(valid, key=lambda mb: mb[1][5])
+                  f"{b[3]:>9.1f}% | {b[4]:>7.1f}%")
+        best_mode, best_row = max(valid, key=lambda mb: mb[1][4])
         print("  " + "-" * 64)
         print(f"  WINNER: mode={best_mode}  threshold={best_row[0]:.2f}  "
-              f"bal-acc={best_row[5]:.1f}%")
+              f"bal-acc={best_row[4]:.1f}%")
         print("#" * 80)
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(
+        description="Sliding-window steganalysis benchmark (multi-mode sweep).")
+    parser.add_argument('--checkpoint', default=MODEL_CHECKPOINT,
+                        help=f"Model checkpoint to test (default: {MODEL_CHECKPOINT}).")
+    parser.add_argument('--images', type=int, default=N_IMAGES,
+                        help=f"Images scored per folder; lower = faster sweep "
+                             f"(default: {N_IMAGES}).")
+    args = parser.parse_args()
+    main(checkpoint_path=args.checkpoint, n_images=args.images)
