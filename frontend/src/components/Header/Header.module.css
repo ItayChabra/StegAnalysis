@@ -1,0 +1,65 @@
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 56px;
+  padding: 0 24px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+}
+
+/* ── Left side ── */
+.left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Diamond logo mark */
+.logoMark {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--accent);
+  transform: rotate(45deg);
+  flex-shrink: 0;
+}
+
+.logoMark::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+  transform: translate(-50%, -50%);
+}
+
+.wordmark {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-primary);
+  letter-spacing: 0.02em;
+}
+
+/* ── Right side ── */
+.demoToggle {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 5px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+
+.demoToggle.on {
+  background: var(--accent);
+  color: #ffffff;
+  border-color: var(--accent);
+}

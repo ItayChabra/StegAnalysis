@@ -1,0 +1,45 @@
+:root {
+  --bg-base:        #0a0c10;
+  --bg-surface:     #12151c;
+  --bg-elevated:    #1a1e28;
+  --border:         #2a2f3d;
+  --text-primary:   #e8eaf0;
+  --text-secondary: #6b7280;
+  --accent:         #3b82f6;
+  --verdict-clean:  #22c55e;
+  --verdict-warn:   #f59e0b;
+  --verdict-alert:  #ef4444;
+  --heatmap-low:    #1d4ed8;
+  --heatmap-high:   #dc2626;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  min-height: 100vh;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

@@ -7,7 +7,7 @@ array arithmetic, giving the same result in a fraction of the time.
 
 Genome parameters:
     gen_type:       'fft'
-    capacity_ratio: float  — fraction of eligible frequency components to modify
+    capacity_ratio: float  — payload in TRUE bits-per-pixel (bpp)
     freq_band:      'low' | 'mid' | 'high'
     strength:       float 2.0–20.0 — quantization step in magnitude domain
 """
@@ -129,7 +129,9 @@ class FFTGenerator(BaseGenerator):
         if n_unique == 0:
             return None, 0
 
-        target_count = max(1, int(n_unique * capacity_ratio))
+        # capacity_ratio is TRUE bits-per-pixel: one bit per modified component,
+        # capped at the unique conjugate pairs available in this frequency band.
+        target_count = min(n_unique, max(1, int(capacity_ratio * h * w)))
         total_bits   = target_count
 
         # ---- Prepare bits -----------------------------------------------

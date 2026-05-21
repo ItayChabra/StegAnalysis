@@ -35,25 +35,19 @@ STRATEGY_CONFIGS = {
     # ── LSB — spatial domain ──────────────────────────────────────────────────
     'lsb_sequential': {
         'gen_type': 'lsb', 'strategy': 'sequential',
-        'capacity_ratio': 0.50, 'edge_threshold': 0,
+        'capacity_ratio': 0.50,
         'bit_depth': 1, 'step': 1, 'message': SECRET_MESSAGE,
     },
     'lsb_random': {
         'gen_type': 'lsb', 'strategy': 'random',
-        'capacity_ratio': 0.50, 'edge_threshold': 0,
+        'capacity_ratio': 0.50,
         'bit_depth': 1, 'step': 1, 'message': SECRET_MESSAGE,
     },
     'lsb_skip': {
-        # Best evolved skip genome: Cap 0.56, Edge threshold 95-96
+        # Best evolved skip genome: Cap 0.56, Step 3
         'gen_type': 'lsb', 'strategy': 'skip',
-        'capacity_ratio': 0.56, 'edge_threshold': 95,
+        'capacity_ratio': 0.56,
         'bit_depth': 1, 'step': 3, 'message': SECRET_MESSAGE,
-    },
-    'lsb_edge': {
-        # Best evolved edge genome: Cap 0.21, Edge threshold 9
-        'gen_type': 'lsb', 'strategy': 'edge',
-        'capacity_ratio': 0.21, 'edge_threshold': 9,
-        'bit_depth': 1, 'step': 1, 'message': SECRET_MESSAGE,
     },
     # ── DCT — block frequency domain ─────────────────────────────────────────
     'dct_mid': {
@@ -160,7 +154,7 @@ def run_strategy_evaluation(model_path: str, image_path: str):
     print("     STRATEGY EVALUATION — SLIDING WINDOW STEGANALYSIS")
     print(f"     Window: {WINDOW_SIZE}×{WINDOW_SIZE}  |  Stride: {WINDOW_STRIDE}  |  "
           f"Flag threshold: {DETECTION_THRESH * 100:.0f}%")
-    print(f"     Generators: LSB (4 strategies) + DCT (2 variants) + FFT (2 variants)")
+    print(f"     Generators: LSB (3 strategies) + DCT (2 variants) + FFT (2 variants)")
     print("=" * 70)
 
     print(f"\n[SETUP]  Loading model: {model_path}  |  Device: {DEVICE}")
@@ -196,7 +190,7 @@ def run_strategy_evaluation(model_path: str, image_path: str):
         print(f"[STRATEGY: {strategy_name.upper()}]  ({gt.upper()})")
         if gt == 'lsb':
             print(f"  Capacity: {config['capacity_ratio']:.2f}  |  "
-                  f"Edge threshold: {config['edge_threshold']}  |  Step: {config.get('step', 1)}")
+                  f"Step: {config.get('step', 1)}")
         elif gt == 'dct':
             print(f"  Capacity: {config['capacity_ratio']:.2f}  |  "
                   f"Coeff: {config['coeff_selection']}  |  Strength: {config['strength']:.1f}")
