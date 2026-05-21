@@ -173,6 +173,7 @@ class EvolutionaryManager:
             'cost_exponent':  (cost_exponent if cost_exponent is not None
                                else round(random.uniform(0.7, 1.5), 2)),
             'use_diagonal':   True,
+            'canonical':      True,
         }
 
     def _generate_random_genome(self, name: str) -> dict:
@@ -604,6 +605,7 @@ class EvolutionaryManager:
                 'capacity_ratio': 0.40,
                 'cost_exponent':  round(random.uniform(0.5, 2.0), 2),
                 'use_diagonal':   random.choice([True, False]),
+                'canonical':      True,
             }
         candidates = [
             g for g in self.population

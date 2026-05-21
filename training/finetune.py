@@ -140,7 +140,7 @@ _STRATEGY_CONFIGS = [
     # and SUNI_04 (0.40 bpp) — the two canonical test targets.
     ('adaptive_suniward', {'gen_type': 'adaptive', 'adaptive_mode': 'suniward',
                            'sigma_offset': 0.5, 'capacity_ratio': 0.30,
-                           'cost_exponent': 1.2, 'use_diagonal': True}),
+                           'cost_exponent': 1.2, 'use_diagonal': True, 'canonical': True}),
 ]
 
 

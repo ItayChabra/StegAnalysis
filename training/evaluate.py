@@ -147,9 +147,9 @@ STRATEGY_CONFIGS = {
     # cost_exponent: higher = more concentrated embedding in texture.
 
     'adaptive_suniward': [
-        {'label': 'low_cap',  'gen_type': 'adaptive', 'adaptive_mode': 'suniward', 'capacity_ratio': 0.20, 'sigma_offset': 1.0, 'cost_exponent': 1.0, 'use_diagonal': True},
-        {'label': 'mid_cap',  'gen_type': 'adaptive', 'adaptive_mode': 'suniward', 'capacity_ratio': 0.40, 'sigma_offset': 1.0, 'cost_exponent': 1.0, 'use_diagonal': True},  # reference
-        {'label': 'high_cap', 'gen_type': 'adaptive', 'adaptive_mode': 'suniward', 'capacity_ratio': 0.75, 'sigma_offset': 1.0, 'cost_exponent': 1.0, 'use_diagonal': True},
+        {'label': 'low_cap',  'gen_type': 'adaptive', 'adaptive_mode': 'suniward', 'capacity_ratio': 0.20, 'sigma_offset': 1.0, 'cost_exponent': 1.0, 'use_diagonal': True, 'canonical': True},
+        {'label': 'mid_cap',  'gen_type': 'adaptive', 'adaptive_mode': 'suniward', 'capacity_ratio': 0.40, 'sigma_offset': 1.0, 'cost_exponent': 1.0, 'use_diagonal': True, 'canonical': True},  # reference
+        {'label': 'high_cap', 'gen_type': 'adaptive', 'adaptive_mode': 'suniward', 'capacity_ratio': 0.75, 'sigma_offset': 1.0, 'cost_exponent': 1.0, 'use_diagonal': True, 'canonical': True},
     ],
 }
 

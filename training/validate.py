@@ -176,6 +176,7 @@ def _sample_val_config(rng: random.Random) -> dict:
             'sigma_offset':   rng.uniform(0.5, 5.0),
             'use_diagonal':   rng.choice([True, False]),
             'cost_exponent':  rng.uniform(0.5, 2.0),
+            'canonical':      True,
         }
     # fft
     return {
