@@ -97,15 +97,16 @@ DEFAULT_CHECKPOINT = 'srnet_best_val.pth'
 # MIN_AUC_FROM_EVAL below and the menu rebuilds automatically.
 
 MIN_AUC_FROM_EVAL = {
-    "lsb_sequential": 0.7448,
-    "lsb_random": 0.6741,
-    "lsb_skip": 0.5984,
-    "dct_mid": 0.9372,
-    "dct_low_mid": 0.7846,
-    "fft_low": 0.85,  # raised from 0.681 — physically capped, don't over-invest
-    "fft_mid": 0.7003,
-    "fft_high": 0.9937,
-    "adaptive_suniward": 0.80,  # raised from 0.5204 — mismatch dead-end, keep modest not dominant
+    # Run 21 epoch-30 evaluation (evaluate.py, 300 images/strategy, 3 configs each)
+    "lsb_sequential": 0.8246,
+    "lsb_random":     0.9122,
+    "lsb_skip":       0.8473,
+    "dct_mid":        0.7935,
+    "dct_low_mid":    0.7481,
+    "fft_low":        0.8370,
+    "fft_mid":        0.8935,
+    "fft_high":       0.8401,
+    "adaptive_suniward": 0.5293,  # ~random: canonical S-UNIWARD unlearned — highest priority
 }
 
 # Reference configs — one representative per strategy. capacity_ratio is TRUE

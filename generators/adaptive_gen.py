@@ -49,7 +49,7 @@ for adversarial training, not bit-recoverable steganography.
 
 import numpy as np
 from PIL import Image
-from scipy.signal import convolve2d
+from scipy.signal import convolve2d, fftconvolve
 from scipy.special import expit
 
 from generators.base_generator import BaseGenerator
@@ -153,9 +153,9 @@ class AdaptiveGenerator(BaseGenerator):
 
         for Fk in filters:
             absF = np.abs(Fk)
-            R    = convolve2d(padded, Fk, mode='same', boundary='fill')
+            R    = fftconvolve(padded, Fk, mode='same')
             S    = 1.0 / (np.abs(R) + _CANON_SIGMA)
-            xi   = convolve2d(S, np.rot90(absF, 2), mode='same', boundary='fill')
+            xi   = fftconvolve(S, np.rot90(absF, 2), mode='same')
             # Even-length filters (db8 = 16) carry a half-pixel offset; the
             # reference circshifts xi by 1 in each axis to realign the grid.
             if Fk.shape[0] % 2 == 0:

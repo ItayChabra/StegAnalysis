@@ -12,7 +12,7 @@ AGGREGATION MODES (aggregate_scores)
            false positives on textured covers.
   'mean' — arithmetic mean. Lowest cover scores; dilutes localised stego.
   'vote' — fraction of windows >= VOTE_FLOOR.
-  'p80'  — 80th-percentile window score. Middle ground.
+  'p80'  — 80th-percentile window score. Middwhatle ground.
 """
 
 import argparse

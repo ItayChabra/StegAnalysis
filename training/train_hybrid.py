@@ -63,12 +63,12 @@ cudnn.benchmark                       = True
 
 
 def run_training(checkpoint_path=None):
-    print(f"Starting Hybrid Training Run 20 (LSB / DCT / FFT / S-UNIWARD) on {DEVICE}")
-    print("Run 20 changes:")
-    print("  Capacity: capacity_ratio is now TRUE bits-per-pixel for ALL generators")
-    print("  EA scope: per-method bpp ranges + strength floors fence the search space")
-    print("  Adaptive: shape-only EA; payload set by ADAPTIVE_CURRICULUM_SCHEDULE")
-    print("  Adaptive enters every batch via the Layer-7 floor, curriculum-paced")
+    print(f"Starting Hybrid Training Run 21 (LSB / DCT / FFT / S-UNIWARD) on {DEVICE}")
+    print("Run 21 changes:")
+    print("  Adaptive: canonical S-UNIWARD (Daubechies-8 back-convolution) — canonical=True")
+    print("  EA penalty: re-enabled CAPACITY_PENALTY_WEIGHT=0.15, per-method thresholds")
+    print("  Capacity floors raised: LSB (0.20,0.75) DCT (0.12,0.30) FFT (0.08,0.20)")
+    print("  WOW / HUGO / lsb_edge removed; S-UNIWARD is the only adaptive method")
     print("  Architecture: Triple-branch frontend (11 SRM + 53 spatial + 21 FFT = 85 ch)")
     print("  Label smoothing: 0.1")
     print(f"  CURRICULUM_END: {CURRICULUM_END}  |  EPOCHS: {EPOCHS}")
@@ -440,7 +440,7 @@ def _print_epoch_header(epoch, lr, blend_factor, curriculum_active, cap_floor):
 def _run_diagnostic(inputs_t, n_real):
     """Quick sanity-check printed once at the very start of training."""
     print("\n" + "=" * 65)
-    print("DIAGNOSTIC CHECK (Run 20: Triple-Branch)")
+    print("DIAGNOSTIC CHECK (Run 21: Triple-Branch)")
     print("=" * 65)
     real_data = inputs_t[:n_real]
     covers    = real_data[0::2, 0:1, :, :].cpu().numpy()

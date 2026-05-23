@@ -377,7 +377,7 @@ class EvolutionaryManager:
         """
         self.generation += 1
 
-        # Score (fitness = raw fool rate; capacity penalty retired).
+        # Score with capacity anti-collapse penalty (CAPACITY_PENALTY_WEIGHT=0.15).
         final_scores = {}
         for genome in self.population:
             data = self.stats[genome['name']]
