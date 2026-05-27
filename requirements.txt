@@ -16,3 +16,12 @@ matplotlib
 # --- User Interface & Utilities ---
 click
 tqdm
+
+# --- API server ---
+fastapi
+uvicorn
+python-multipart
+scipy
+
+# --- Steganography payload encryption ---
+cryptography

@@ -107,37 +107,35 @@ All hyperparameters live in `training/config.py`. Edit only that file for tuning
 The FastAPI server runs on `http://localhost:8000`. Communication is strict HTTP REST (no WebSockets/streaming).
 
 ### POST `/api/analyze`
-Uploads an image (`multipart/form-data`) and runs synchronous SRNet inference. Returns JSON with confidence, metrics, window scores, and URLs for the generated heatmap and noisemap.
-
-### GET `/api/heatmap/{job_id}`
-Returns a PNG heatmap of suspicion scores overlaid on the image.
-
-### GET `/api/noisemap/{job_id}`
-Returns a PNG of the amplified pixel residual.
+Uploads an image (`multipart/form-data`) and runs synchronous SRNet inference. Returns JSON with confidence, metrics, window scores, per-plane `bitplane_scores`, a heuristic `method_hint`, and URLs for heatmap / noisemap / spectrum.
 
 ### POST `/api/embed`
-Demo tool that embeds a payload using one of the generators. Returns the stego image URL and metrics.
+Embeds an (optionally encrypted) message. Recoverable methods are `lsb`/`dct`/`fft`; `adaptive` (S-UNIWARD) embeds statistical noise only (`recoverable: false`).
 
-**Request:**
+**Request (`multipart/form-data`):**
 ```
-Content-Type: multipart/form-data
-file:       [image file]
-strategy:   "lsb_sequential" | "dct_mid" | "fft_mid"
-capacity:   0.5   (float, sent as a form field, range 0.1–0.75)
+file:            [image file]
+method:          "lsb" | "dct" | "fft" | "adaptive"
+message:         text to hide (recoverable methods)
+cipher:          "none" | "aes256gcm" | "chacha20poly1305" | "fernet"
+passphrase:      required when cipher != none
+# per-method params (optional, defaulted):
+strategy/step/bit_depth      (lsb)   coeff_selection/strength (dct)
+freq_band/strength           (fft)   capacity (adaptive)
 ```
+Response includes `job_id`, `stego_url`, `psnr`, `capacity_bytes`, `used_bytes`, `recoverable`, and `extract_hint` (the settings needed to reveal it).
 
-**Response:**
-```json
-{
-  "job_id": "def456",
-  "stego_url": "/api/stego/def456",
-  "psnr": 44.2,
-  "pixels_modified": 32768
-}
-```
+### POST `/api/extract`
+Recovers a hidden message. Auto-detects the method (LSB/DCT/FFT) for default settings; non-default `strength`/`step` must be supplied (the embed `extract_hint` carries these). Returns `{message, method, cipher, bytes}`, or a typed error: `404 no_payload`, `422 bad_key`.
 
-### GET `/api/stego/{job_id}`
-Returns the stego PNG produced by `/api/embed`.
+### POST `/api/capacity`
+Given `file` + `method` (+ params), returns the max recoverable payload (`max_message_bytes`) for that image.
+
+### Recoverable codec (backend)
+`generators/payload_codec.py` frames a 52-byte self-describing header (magic, method, cipher, length, salt, nonce, params, CRC-32) ahead of the ciphertext; `generators/crypto_utils.py` does the AEAD/Fernet crypto. Each generator exposes `embed_payload`/`extract_payload` (deterministic positions) **separate from** the training `run()`/`embed()` paths, which are unchanged.
+
+### Image GET endpoints (per `job_id`)
+`/api/original`, `/api/stego`, `/api/heatmap`, `/api/noisemap` (SRM residual; `?source=stego` in embed flow), `/api/spectrum` (log-FFT + band rings; `?source=`), `/api/diff` (cover↔stego pixel diff, embed flow), `/api/bitplane/{n}` (bit plane 0–7; `?source=`). All return PNG.
 
 ---
 
@@ -150,7 +148,7 @@ Returns the stego PNG produced by `/api/embed`.
 
 ### Python / Backend (FastAPI, PyTorch)
 
-- **Dependencies:** fastapi, uvicorn, python-multipart, torch, torchvision, Pillow, numpy, scipy.
+- **Dependencies:** fastapi, uvicorn, python-multipart, torch, torchvision, Pillow, numpy, scipy, cryptography.
 - Maintain strict separation between ML logic (`models/`), dataset generation (`generators/`), and the API layer (`api/`).
 - Ensure CORS is configured correctly in `server.py` for local Vite development.
 
@@ -159,7 +157,8 @@ Returns the stego PNG produced by `/api/embed`.
 - **API Calls:** All `fetch()` calls must live in `frontend/src/api/client.js`. Components use custom hooks (e.g., `useAnalysis`) to access these. Throw descriptive errors on non-2xx responses.
 - **Styling:** Use standard CSS Modules (`.module.css`). No Tailwind, MUI, Shadcn, or UI component libraries. Build elements from scratch using native CSS custom properties.
 - **Caching:** Cache-bust dynamically generated API images by appending timestamps: `?t=${Date.now()}`.
-- **State Management:** Managed via a single state machine enum (IDLE, UPLOADING, ANALYZING, COMPLETE, ERROR).
+- **Routing:** `react-router-dom` with pages `/analyze`, `/embed`, `/extract`, `/learn` (`frontend/src/pages/`). Shared session state (history drawer) lives in `context/AppContext.jsx`.
+- **State Management:** Per-flow state-machine hooks (`useAnalysis`, `useBatchAnalysis`, `useEmbed`, `useExtract`) using a status enum (IDLE, UPLOADING/PROCESSING, COMPLETE, ERROR).
 - **Complex UI Elements:** Custom interactive elements (like the Before/After Image Comparison Slider) must be built from scratch using raw DOM events (`onMouseDown`, `onMouseMove`) and `requestAnimationFrame`.
 
 ---
@@ -168,7 +167,7 @@ Returns the stego PNG produced by `/api/embed`.
 
 ### Backend (Terminal 1):
 ```bash
-pip install fastapi uvicorn python-multipart torch torchvision pillow numpy scipy
+pip install fastapi uvicorn python-multipart torch torchvision pillow numpy scipy cryptography
 uvicorn api.server:app --reload --port 8000
 ```
 

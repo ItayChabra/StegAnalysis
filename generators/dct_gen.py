@@ -178,3 +178,90 @@ class DCTGenerator(BaseGenerator):
             Image.fromarray(stego_array).save(output_path)
 
         return stego_array, psnr
+
+    # ------------------------------------------------------------------ recoverable codec
+    # Extractable path for /api/embed + /api/extract. Differs from embed() above:
+    # blocks are filled in deterministic RASTER order (not np.random.choice) and the
+    # coefficient set is fixed ('random' is coerced to 'mid'), so parity can be read
+    # back after re-DCT. embed()/run() are untouched (the EA training relies on them).
+
+    @staticmethod
+    def _dctn():
+        try:
+            from scipy.fft import dctn, idctn
+        except ImportError:                                       # pragma: no cover
+            from scipy.fftpack import dctn, idctn
+        return dctn, idctn
+
+    def _recoverable_coeffs(self, coeff_selection):
+        if coeff_selection not in ('mid', 'low_mid'):
+            coeff_selection = 'mid'                               # 'random' is not recoverable
+        return self._get_coeff_positions(coeff_selection)
+
+    def _forward(self, arr):
+        """uint8 image → (dct_blocks, h, w, blocks_w)."""
+        img = arr.astype(np.uint8)
+        h, w = img.shape
+        pad_h = (8 - h % 8) % 8
+        pad_w = (8 - w % 8) % 8
+        padded = np.pad(img, ((0, pad_h), (0, pad_w)), mode='edge').astype(np.float32)
+        ph, pw = padded.shape
+        blocks_h, blocks_w = ph // 8, pw // 8
+        dctn, _ = self._dctn()
+        blocks = padded.reshape(blocks_h, 8, blocks_w, 8).transpose(0, 2, 1, 3)
+        return dctn(blocks, axes=(-2, -1), norm='ortho'), h, w, blocks_w
+
+    def payload_capacity_bits(self, shape, coeff_selection='mid', strength=3.0):
+        h, w = shape
+        blocks_h = (h + (8 - h % 8) % 8) // 8
+        blocks_w = (w + (8 - w % 8) % 8) // 8
+        return blocks_h * blocks_w * len(self._recoverable_coeffs(coeff_selection))
+
+    def embed_payload(self, arr, bits, coeff_selection='mid', strength=3.0):
+        bits = np.asarray(bits, dtype=np.uint8)
+        dct_blocks, h, w, blocks_w = self._forward(arr)
+        coeff_positions = self._recoverable_coeffs(coeff_selection)
+        bits_per_block = len(coeff_positions)
+        n_blocks = dct_blocks.shape[0] * dct_blocks.shape[1]
+
+        n_needed = int(np.ceil(len(bits) / bits_per_block))
+        if n_needed > n_blocks:
+            raise ValueError("Image too small for this payload with the chosen settings.")
+
+        padded_bits = np.zeros(n_needed * bits_per_block, dtype=np.uint8)
+        padded_bits[:len(bits)] = bits
+        bits_2d = padded_bits.reshape(n_needed, bits_per_block)
+
+        idx = np.arange(n_needed)                                 # deterministic raster order
+        block_rows, block_cols = idx // blocks_w, idx % blocks_w
+
+        for coeff_idx, (cr, cc) in enumerate(coeff_positions):
+            coeffs = dct_blocks[block_rows, block_cols, cr, cc]
+            b = bits_2d[:, coeff_idx].astype(np.int32)
+            q = np.round(coeffs / strength).astype(np.int32)
+            wrong = (q % 2 == 0).astype(np.int32) * b + \
+                    (q % 2 != 0).astype(np.int32) * (1 - b)
+            q = q + wrong
+            dct_blocks[block_rows, block_cols, cr, cc] = q * strength
+
+        _, idctn = self._dctn()
+        ph, pw = dct_blocks.shape[0] * 8, dct_blocks.shape[1] * 8
+        idct_blocks = idctn(dct_blocks, axes=(-2, -1), norm='ortho')
+        stego_padded = idct_blocks.transpose(0, 2, 1, 3).reshape(ph, pw)
+        return np.clip(np.rint(stego_padded[:h, :w]), 0, 255).astype(np.uint8)
+
+    def extract_payload(self, arr, n_bits, coeff_selection='mid', strength=3.0):
+        dct_blocks, _, _, blocks_w = self._forward(arr)
+        coeff_positions = self._recoverable_coeffs(coeff_selection)
+        bits_per_block = len(coeff_positions)
+
+        n_needed = int(np.ceil(n_bits / bits_per_block))
+        idx = np.arange(n_needed)
+        block_rows, block_cols = idx // blocks_w, idx % blocks_w
+
+        out = np.zeros((n_needed, bits_per_block), dtype=np.uint8)
+        for coeff_idx, (cr, cc) in enumerate(coeff_positions):
+            coeffs = dct_blocks[block_rows, block_cols, cr, cc]
+            q = np.round(coeffs / strength).astype(np.int32)
+            out[:, coeff_idx] = (q % 2 != 0).astype(np.uint8)
+        return out.reshape(-1)[:n_bits]

@@ -1,0 +1,35 @@
+.result { display: flex; flex-direction: column; gap: 14px; }
+
+.meta { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.message {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.errorBox {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+
+.errIcon { font-size: 20px; line-height: 1.2; }
+
+.errTitle { font-size: 14px; color: var(--verdict-alert); }
+
+.errMsg { font-size: 13px; color: var(--text-secondary); margin: 4px 0 0; line-height: 1.5; }

@@ -1,13 +1,16 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import styles from './DropZone.module.css';
+import { pgmFileToDataUrl } from '../../utils/pgm.js';
 
 const MAX_SIZE    = 20 * 1024 * 1024; // 20 MB
-const ACCEPT_MIME = ['image/png', 'image/jpeg'];
+const ACCEPT_MIME = ['image/png', 'image/jpeg', 'image/bmp'];
 
 function validate(file) {
-  const isPgm  = file.name.toLowerCase().endsWith('.pgm');
+  const name = file.name.toLowerCase();
+  const isPgm = name.endsWith('.pgm');
+  const isBmp = name.endsWith('.bmp') || file.type === 'image/bmp';
   const isMime = ACCEPT_MIME.includes(file.type);
-  if (!isPgm && !isMime) return 'Unsupported file type. Please drop a PNG, JPG, or PGM image.';
+  if (!isPgm && !isBmp && !isMime) return 'Unsupported file type. Please drop a PNG, JPG, BMP, or PGM image.';
   if (file.size > MAX_SIZE) return 'File exceeds the 20 MB limit.';
   return null;
 }
@@ -23,27 +26,26 @@ export default function DropZone({ analyze, state }) {
   const isDisabled = state !== 'IDLE';
   const isBusy     = state === 'UPLOADING' || state === 'ANALYZING';
 
-  // Revoke object URL when file changes or component unmounts
+  // Build preview whenever file changes. PGMs are decoded client-side.
   useEffect(() => {
-    return () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-    };
-  }, [previewUrl]);
+    if (!file) { setPreviewUrl(null); return; }
+    if (file.name.toLowerCase().endsWith('.pgm')) {
+      let cancelled = false;
+      pgmFileToDataUrl(file).then((url) => { if (!cancelled) setPreviewUrl(url); });
+      return () => { cancelled = true; };
+    }
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
 
   const acceptFile = useCallback((incoming) => {
     const err = validate(incoming);
-    if (err) {
-      setValidErr(err);
-      return;
-    }
+    if (err) { setValidErr(err); return; }
     setValidErr(null);
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    const pgm = incoming.name.toLowerCase().endsWith('.pgm');
-    setIsPgm(pgm);
+    setIsPgm(incoming.name.toLowerCase().endsWith('.pgm'));
     setFile(incoming);
-    // Browsers cannot render PGM — skip createObjectURL for them
-    setPreviewUrl(pgm ? null : URL.createObjectURL(incoming));
-  }, [previewUrl]);
+  }, []);
 
   const onDragOver = useCallback((e) => {
     e.preventDefault();
@@ -98,7 +100,7 @@ export default function DropZone({ analyze, state }) {
         <input
           ref={inputRef}
           type="file"
-          accept=".png,.jpg,.jpeg,.pgm"
+          accept=".png,.jpg,.jpeg,.bmp,.pgm"
           className={styles.fileInput}
           onChange={onInputChange}
           tabIndex={-1}
@@ -107,8 +109,9 @@ export default function DropZone({ analyze, state }) {
         {file ? (
           /* ── File selected ── */
           <>
-            {isPgm ? (
-              /* PGM: browsers can't render it, show a placeholder */
+            {previewUrl ? (
+              <img src={previewUrl} alt="Preview" className={styles.preview} />
+            ) : isPgm ? (
               <div className={styles.pgmPlaceholder} aria-label="PGM image loaded">
                 <div className={styles.pgmIcon} aria-hidden="true">
                   <div className={styles.pgmBar} />
@@ -117,9 +120,7 @@ export default function DropZone({ analyze, state }) {
                 </div>
                 <p className={styles.pgmLabel}>PGM Image Loaded</p>
               </div>
-            ) : (
-              <img src={previewUrl} alt="Preview" className={styles.preview} />
-            )}
+            ) : null}
             <p className={styles.filename}>{file.name}</p>
             <button
               className={styles.analyzeBtn}
@@ -145,7 +146,7 @@ export default function DropZone({ analyze, state }) {
               <div className={styles.uploadTray} />
             </div>
             <p className={styles.hint}>Drop an image here</p>
-            <p className={styles.formats}>PNG · JPG · PGM · max 20 MB</p>
+            <p className={styles.formats}>PNG · JPG · BMP · PGM · max 20 MB</p>
           </>
         )}
       </div>

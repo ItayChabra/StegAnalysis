@@ -191,3 +191,61 @@ class FFTGenerator(BaseGenerator):
             Image.fromarray(stego_array).save(output_path)
 
         return stego_array, psnr
+
+    # ------------------------------------------------------------------ recoverable codec
+    # Extractable path for /api/embed + /api/extract. Components are taken in a
+    # DETERMINISTIC sorted order (not np.random.choice), so parity can be read back
+    # after re-FFT. Round-trip is fragile (float IFFT + uint8 rounding); the codec's
+    # CRC catches failures. embed()/run() are untouched (the EA training relies on them).
+
+    def _ordered_components(self, h, w, freq_band):
+        """Deterministic, sorted unique conjugate-pair components for a band."""
+        mask = self._build_band_mask(h, w, freq_band)
+        er, ec = np.where(mask)
+        pr, pc = self._shifted_conjugate_partner(er, ec, h, w)
+        flat = er * w + ec
+        keep = flat <= (pr * w + pc)
+        er, ec, pr, pc = er[keep], ec[keep], pr[keep], pc[keep]
+        order = np.argsort(er * w + ec, kind='stable')
+        return er[order], ec[order], pr[order], pc[order]
+
+    def payload_capacity_bits(self, shape, freq_band='mid', strength=8.0):
+        h, w = shape
+        er, _, _, _ = self._ordered_components(h, w, freq_band)
+        return len(er)
+
+    def embed_payload(self, arr, bits, freq_band='mid', strength=8.0):
+        bits = np.asarray(bits, dtype=np.uint8)
+        h, w = arr.shape
+        fft_shifted = np.fft.fftshift(np.fft.fft2(arr.astype(float)))
+        magnitude, phase = np.abs(fft_shifted), np.angle(fft_shifted)
+
+        er, ec, pr, pc = self._ordered_components(h, w, freq_band)
+        n_needed = len(bits)
+        if n_needed > len(er):
+            raise ValueError("Image too small for this payload in the chosen band.")
+        rows, cols = er[:n_needed], ec[:n_needed]
+        pair_rows, pair_cols = pr[:n_needed], pc[:n_needed]
+
+        effective_strength = strength * np.sqrt(h * w)
+        q = np.round(magnitude[rows, cols] / effective_strength).astype(np.int64)
+        wrong_parity = (q % 2 == 0) == bits.astype(bool)         # XOR: parity != bit
+        q[wrong_parity] += 1
+        new_mag = np.maximum(0.0, q * effective_strength)
+
+        modified = magnitude.copy()
+        modified[rows, cols] = new_mag
+        non_self = (rows != pair_rows) | (cols != pair_cols)
+        modified[pair_rows[non_self], pair_cols[non_self]] = new_mag[non_self]
+
+        stego_float = np.real(np.fft.ifft2(np.fft.ifftshift(modified * np.exp(1j * phase))))
+        return np.clip(np.rint(stego_float), 0, 255).astype(np.uint8)
+
+    def extract_payload(self, arr, n_bits, freq_band='mid', strength=8.0):
+        h, w = arr.shape
+        magnitude = np.abs(np.fft.fftshift(np.fft.fft2(arr.astype(float))))
+        er, ec, _, _ = self._ordered_components(h, w, freq_band)
+        rows, cols = er[:n_bits], ec[:n_bits]
+        effective_strength = strength * np.sqrt(h * w)
+        q = np.round(magnitude[rows, cols] / effective_strength).astype(np.int64)
+        return (q % 2 != 0).astype(np.uint8)[:n_bits]

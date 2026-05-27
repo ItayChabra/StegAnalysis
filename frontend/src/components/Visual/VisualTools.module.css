@@ -1,0 +1,97 @@
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.single {
+  width: 100%;
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+}
+
+.img {
+  max-width: 100%;
+  max-height: 480px;
+  object-fit: contain;
+  display: block;
+}
+
+.legend {
+  display: flex;
+  gap: 16px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+.legend i {
+  width: 18px;
+  height: 3px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+/* Frequency tab: side-by-side spectra in embed flow */
+.spectraPair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  width: 100%;
+}
+
+.spectraPane {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  padding-bottom: 8px;
+}
+
+.spectraLabel {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  letter-spacing: 0.05em;
+  padding-top: 8px;
+}
+
+/* Frequency key-facts box */
+.freqKey {
+  margin-top: 10px;
+  padding: 10px 14px;
+  background: rgba(99, 102, 241, 0.06);
+  border: 1px solid rgba(99, 102, 241, 0.18);
+  border-radius: var(--radius);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 20px;
+}
+
+.freqKeyItem {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.freqKeyItem strong {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+@media (max-width: 600px) {
+  .spectraPair, .freqKey { grid-template-columns: 1fr; }
+}

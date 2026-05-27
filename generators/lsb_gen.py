@@ -136,3 +136,62 @@ class LSBGenerator(BaseGenerator):
         if mse == 0:
             return float('inf')
         return 20 * np.log10(255.0 / np.sqrt(mse))
+
+    # ------------------------------------------------------------------ recoverable codec
+    # The methods below are the EXTRACTABLE path used by /api/embed + /api/extract.
+    # Unlike embed() above (training: random positions, random padding), these use
+    # DETERMINISTIC positions so the exact bits can be read back. They do not touch
+    # embed()/run(), which the EA training pipeline still relies on.
+
+    @staticmethod
+    def _payload_positions(total_pixels, n_positions, strategy, step):
+        """Deterministic pixel indices that embed_payload/extract_payload agree on."""
+        if strategy == 'skip':
+            positions = np.arange(0, total_pixels, max(1, int(step)))
+        else:  # 'sequential'
+            positions = np.arange(total_pixels)
+        if len(positions) < n_positions:
+            raise ValueError("Image too small for this payload with the chosen strategy.")
+        return positions[:n_positions]
+
+    @staticmethod
+    def payload_capacity_bits(shape, strategy='sequential', step=1, bit_depth=1):
+        """Max recoverable bits for an image of ``shape`` with these settings."""
+        total = int(np.prod(shape))
+        if strategy == 'skip':
+            slots = len(np.arange(0, total, max(1, int(step))))
+        else:
+            slots = total
+        return slots * int(bit_depth)
+
+    def embed_payload(self, arr, bits, strategy='sequential', step=1, bit_depth=1):
+        """Embed an exact bit array at deterministic positions. Returns uint8 stego."""
+        bits = np.asarray(bits, dtype=np.uint8)
+        flat = arr.astype(np.uint8).flatten()
+
+        n_positions = int(np.ceil(len(bits) / bit_depth))
+        positions = self._payload_positions(flat.size, n_positions, strategy, step)
+
+        # Pad to a whole number of pixels (unused high slots embed as 0).
+        padded = np.zeros(n_positions * bit_depth, dtype=np.uint8)
+        padded[:len(bits)] = bits
+        bits_2d = padded.reshape(n_positions, bit_depth)
+
+        pixels = flat[positions].copy()
+        for b in range(bit_depth):
+            pixels &= (255 - (1 << b))
+            pixels |= (bits_2d[:, b] << b)
+        flat[positions] = pixels
+        return flat.reshape(arr.shape)
+
+    def extract_payload(self, arr, n_bits, strategy='sequential', step=1, bit_depth=1):
+        """Read ``n_bits`` bits from deterministic positions. Returns uint8 bit array."""
+        flat = arr.astype(np.uint8).flatten()
+        n_positions = int(np.ceil(n_bits / bit_depth))
+        positions = self._payload_positions(flat.size, n_positions, strategy, step)
+
+        pixels = flat[positions]
+        out = np.zeros((n_positions, bit_depth), dtype=np.uint8)
+        for b in range(bit_depth):
+            out[:, b] = (pixels >> b) & 1
+        return out.reshape(-1)[:n_bits]

@@ -3,7 +3,6 @@ import VerdictBanner   from './VerdictBanner.jsx';
 import ConfidenceMeter from './ConfidenceMeter.jsx';
 import WindowHeatGrid  from './WindowHeatGrid.jsx';
 import StatsRow        from './StatsRow.jsx';
-import MethodBadge     from './MethodBadge.jsx';
 
 // selectedPatch (flat index | null) and onCellClick live in App so the
 // ImageComparisonSlider can also read selectedPatch without prop-drilling
@@ -29,8 +28,6 @@ export default function Dashboard({ result, selectedPatch, onCellClick }) {
         maxWindowScore={result.max_window_score}
         psnr={result.psnr}
       />
-
-      <MethodBadge methodHint={result.method_hint} />
     </section>
   );
 }

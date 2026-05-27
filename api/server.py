@@ -4,11 +4,18 @@ FastAPI backend for the SRNet Steganalysis demo.
 Endpoints
 ---------
 GET  /health
-POST /api/analyze
-GET  /api/heatmap/{job_id}
-GET  /api/noisemap/{job_id}
-POST /api/embed
+POST /api/analyze                 — sliding-window detection + bit-plane scores
+POST /api/embed                   — embed a (optionally encrypted) message
+POST /api/extract              stu   — recover a hidden message
+POST /api/capacity                — max payload per method for an image
+GET  /api/original/{job_id}
 GET  /api/stego/{job_id}
+GET  /api/heatmap/{job_id}        — suspicion overlay
+GET  /api/noisemap/{job_id}       — SRM residual ("what the model sees")
+GET  /api/diff/{job_id}           — cover↔stego pixel-diff heatmap (embed flow)
+GET  /api/spectrum/{job_id}       — log-FFT magnitude + band rings
+GET  /api/bitplane/{job_id}/{n}   — single bit-plane (0=LSB … 7=MSB)
+GET  /api/sanitize/{job_id}       — steganography-stripped JPEG download
 """
 
 import io
@@ -30,28 +37,43 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from PIL import Image
+from scipy.signal import convolve2d
 from torchvision import transforms
 
 # ── Project root on sys.path so imports work when uvicorn runs from api/ ──────
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from models.srnet import SRNet                          # noqa: E402
-from generators.unified_generator import UnifiedGenerator  # noqa: E402
+from models.srnet import SRNet                               # noqa: E402
+from generators.unified_generator import UnifiedGenerator    # noqa: E402
+from generators import crypto_utils as crypto                # noqa: E402
+from generators import payload_codec as codec                # noqa: E402
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 DEVICE        = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 WINDOW_SIZE   = 256
-WINDOW_STRIDE = 64
-THRESH_STEGO  = 0.75
+WINDOW_STRIDE = 64    # detection uses every 64-px shift; UI pools to a coarser display grid
+THRESH_STEGO  = 0.80
 THRESH_SUSP   = 0.50
 # Identical to training/config.py LOG_FFT_SCALE — inlined to avoid importing
 # the full training module chain.
 LOG_FFT_SCALE = math.log1p(256 * 256)
 CHECKPOINT    = ROOT / "srnet_finetuned_best.pth"
 
-# Default payload for LSB embedding (demo only)
-_DEFAULT_MESSAGE = "This is a secret message " * 4096
+# SRM "KV" high-pass kernel — the canonical residual the detector keys off.
+_KV_KERNEL = np.array([
+    [-1,  2,  -2,  2, -1],
+    [ 2, -6,   8, -6,  2],
+    [-2,  8, -12,  8, -2],
+    [ 2, -6,   8, -6,  2],
+    [-1,  2,  -2,  2, -1],
+], dtype=np.float32) / 12.0
+
+# Per-method defaults for the recoverable embed/extract path.
+_LSB_DEFAULTS = dict(strategy="sequential", step=1, bit_depth=1)
+_DCT_DEFAULTS = dict(coeff_selection="mid", strength=3.0)
+_FFT_DEFAULTS = dict(freq_band="mid", strength=8.0)
+_RECOVERABLE  = ("lsb", "dct", "fft")
 
 # ── Global singletons (loaded once in lifespan) ───────────────────────────────
 _model:  Optional[SRNet]             = None
@@ -84,6 +106,19 @@ app.add_middleware(
 )
 
 
+# ── Image helpers ─────────────────────────────────────────────────────────────
+
+def _read_image(data: bytes) -> Image.Image:
+    try:
+        return Image.open(io.BytesIO(data))
+    except Exception:
+        raise HTTPException(status_code=400, detail={"error": "Invalid image file"})
+
+
+def _gray_array(image: Image.Image) -> np.ndarray:
+    return np.array(image.convert("L"), dtype=np.uint8)
+
+
 # ── Inference helpers ─────────────────────────────────────────────────────────
 
 def _compute_log_fft(spatial: torch.Tensor) -> torch.Tensor:
@@ -105,7 +140,7 @@ def _patch_to_tensor(patch_arr: np.ndarray) -> torch.Tensor:
 
 
 def _run_inference(image: Image.Image) -> dict:
-    img_arr = np.array(image.convert("L"), dtype=np.uint8)
+    img_arr = _gray_array(image)
     h, w    = img_arr.shape
 
     # Pad images smaller than one window to 256×256
@@ -160,15 +195,30 @@ def _run_inference(image: Image.Image) -> dict:
     }
 
 
-def _infer_method_hint(verdict: str, scores: list) -> Optional[str]:
-    """Heuristic: spread between max and mean hints at LSB vs FFT embedding."""
-    if verdict == "CLEAN" or len(scores) < 2:
-        return None
-    spread = max(scores) - (sum(scores) / len(scores))
-    return "lsb_sequential" if spread > 0.3 else "fft_mid"
+# method_hint was a 2-line score-spread heuristic that mis-classified every test
+# stego (the detector is binary — clean vs stego — and cannot infer method).
+# Removed; do not reintroduce without a true multi-class classifier.
 
 
-# ── Artefact helpers ──────────────────────────────────────────────────────────
+def _bitplane_scores(arr: np.ndarray) -> list:
+    """Per-plane structure metrics (bit 0 = LSB). Used for the anomaly overlay."""
+    out = []
+    for n in range(8):
+        plane = (arr >> n) & 1
+        p = float(plane.mean())
+        entropy = 0.0 if p in (0.0, 1.0) else \
+            float(-p * math.log2(p) - (1 - p) * math.log2(1 - p))
+        # Adjacent-pixel disagreement rate: ~0.5 = noise-like, lower = structured.
+        randomness = float(np.mean(plane[:, 1:] != plane[:, :-1])) if arr.shape[1] > 1 else 0.0
+        out.append({
+            "plane": n,
+            "entropy": round(entropy, 4),
+            "randomness": round(randomness, 4),
+        })
+    return out
+
+
+# ── Artefact (image) builders ─────────────────────────────────────────────────
 
 def _job_dir(job_id: str) -> str:
     d = os.path.join(_tmpdir, job_id)
@@ -176,62 +226,100 @@ def _job_dir(job_id: str) -> str:
     return d
 
 
-def _save_heatmap(
-    job_id: str,
-    scores: list,
-    n_rows: int,
-    n_cols: int,
-    orig: Image.Image,
-) -> None:
+def _save_gray(job_id: str, name: str, arr: np.ndarray) -> None:
+    Image.fromarray(arr.astype(np.uint8)).save(os.path.join(_job_dir(job_id), name))
+
+
+def _save_original(job_id: str, image: Image.Image) -> None:
+    image.convert("RGB").save(os.path.join(_job_dir(job_id), "original.png"))
+
+
+def _save_heatmap(job_id, scores, n_rows, n_cols, orig: Image.Image) -> None:
     out = os.path.join(_job_dir(job_id), "heatmap.png")
     if not scores or n_rows == 0 or n_cols == 0:
         orig.convert("RGB").save(out)
         return
-
     grid = np.array(scores, dtype=np.float32).reshape(n_rows, n_cols)
-    fig, ax = plt.subplots(
-        figsize=(orig.width / 100, orig.height / 100), dpi=100
-    )
+    fig, ax = plt.subplots(figsize=(orig.width / 100, orig.height / 100), dpi=100)
     ax.imshow(orig.convert("RGB"))
-    ax.imshow(
-        grid,
-        cmap="jet",
-        alpha=0.5,
-        extent=[0, orig.width, orig.height, 0],
-        vmin=0,
-        vmax=1,
-        aspect="auto",
-        interpolation="nearest",
-    )
+    ax.imshow(grid, cmap="jet", alpha=0.5,
+              extent=[0, orig.width, orig.height, 0],
+              vmin=0, vmax=1, aspect="auto", interpolation="nearest")
     ax.axis("off")
     plt.tight_layout(pad=0)
     fig.savefig(out, bbox_inches="tight", pad_inches=0)
     plt.close(fig)
 
 
-def _save_original(job_id: str, image: Image.Image) -> None:
-    out = os.path.join(_job_dir(job_id), "original.png")
-    image.convert("RGB").save(out)
+def _build_srm_residual(arr: np.ndarray, out: str) -> None:
+    """Amplified SRM (KV) residual — the high-pass view the detector relies on."""
+    res = convolve2d(arr.astype(np.float32), _KV_KERNEL, mode="same", boundary="symm")
+    amp = np.clip(np.abs(res) * 12.0, 0, 255).astype(np.uint8)
+    Image.fromarray(amp).save(out)
 
 
-def _save_noisemap(job_id: str, width: int, height: int) -> None:
-    out  = os.path.join(_job_dir(job_id), "noisemap.png")
-    grey = Image.fromarray(np.full((height, width, 3), 128, dtype=np.uint8))
-    grey.save(out)
+def _build_diff(cover: np.ndarray, stego: np.ndarray, out: str) -> None:
+    diff = np.abs(stego.astype(np.int16) - cover.astype(np.int16)).astype(np.float32)
+    norm = diff / (diff.max() or 1.0)
+    fig, ax = plt.subplots(figsize=(diff.shape[1] / 100, diff.shape[0] / 100), dpi=100)
+    ax.imshow(norm, cmap="inferno", vmin=0, vmax=1)
+    ax.axis("off")
+    plt.tight_layout(pad=0)
+    fig.savefig(out, bbox_inches="tight", pad_inches=0)
+    plt.close(fig)
 
 
-def _save_stego(job_id: str, stego_arr: np.ndarray) -> None:
-    out = os.path.join(_job_dir(job_id), "stego.png")
-    Image.fromarray(stego_arr.astype(np.uint8)).save(out)
+def _build_spectrum(arr: np.ndarray, out: str) -> None:
+    f   = np.fft.fftshift(np.fft.fft2(arr.astype(np.float32)))
+    mag = np.log1p(np.abs(f))
+    mag = mag / (mag.max() or 1.0)
+    h, w   = arr.shape
+    cy, cx = h // 2, w // 2
+    max_r  = math.sqrt(cy ** 2 + cx ** 2)
+    fig, ax = plt.subplots(figsize=(w / 100, h / 100), dpi=100)
+    ax.imshow(mag, cmap="magma")
+    for frac, color in [(0.15, "#22c55e"), (0.45, "#f59e0b"), (0.75, "#ef4444")]:
+        ax.add_patch(plt.Circle((cx, cy), frac * max_r,
+                                fill=False, ec=color, lw=1.3, alpha=0.9))
+    ax.axis("off")
+    plt.tight_layout(pad=0)
+    fig.savefig(out, bbox_inches="tight", pad_inches=0)
+    plt.close(fig)
 
 
 def _get_artefact(job_id: str, filename: str) -> str:
     path = os.path.join(_tmpdir, job_id, filename)
     if not os.path.exists(path):
-        raise HTTPException(
-            status_code=404, detail={"error": f"Job {job_id!r} not found"}
-        )
+        raise HTTPException(status_code=404, detail={"error": f"Job {job_id!r} not found"})
     return path
+
+
+def _load_gray_artefact(job_id: str, filename: str) -> np.ndarray:
+    return np.array(Image.open(_get_artefact(job_id, filename)).convert("L"), dtype=np.uint8)
+
+
+# ── Recoverable embed/extract plumbing ────────────────────────────────────────
+
+def _recoverable_kwargs(method: str, strategy, step, bit_depth,
+                        coeff_selection, strength, freq_band):
+    """Build (generator, embed_kwargs, params_bytes, method_id) for a method."""
+    if method == "lsb":
+        kw = dict(
+            strategy=strategy or _LSB_DEFAULTS["strategy"],
+            step=int(step) if step is not None else _LSB_DEFAULTS["step"],
+            bit_depth=int(bit_depth) if bit_depth is not None else _LSB_DEFAULTS["bit_depth"],
+        )
+        return _gen.generators["lsb"], kw, codec.pack_lsb_params(**kw), codec.METHOD_LSB
+    if method == "dct":
+        cs = coeff_selection if coeff_selection in ("mid", "low_mid") else _DCT_DEFAULTS["coeff_selection"]
+        kw = dict(coeff_selection=cs,
+                  strength=float(strength) if strength is not None else _DCT_DEFAULTS["strength"])
+        return _gen.generators["dct"], kw, codec.pack_dct_params(**kw), codec.METHOD_DCT
+    if method == "fft":
+        kw = dict(freq_band=freq_band or _FFT_DEFAULTS["freq_band"],
+                  strength=float(strength) if strength is not None else _FFT_DEFAULTS["strength"])
+        return _gen.generators["fft"], kw, codec.pack_fft_params(**kw), codec.METHOD_FFT
+    raise HTTPException(status_code=400, detail={"error": f"Method {method!r} is not recoverable"})
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -243,11 +331,9 @@ async def health():
 
 @app.post("/api/analyze")
 async def analyze(file: UploadFile = File(...)):
-    data = await file.read()
-    try:
-        image = Image.open(io.BytesIO(data))
-    except Exception:
-        raise HTTPException(status_code=400, detail={"error": "Invalid image file"})
+    data    = await file.read()
+    image   = _read_image(data)
+    arr     = _gray_array(image)
 
     result  = _run_inference(image)
     job_id  = uuid.uuid4().hex
@@ -257,10 +343,11 @@ async def analyze(file: UploadFile = File(...)):
 
     _save_original(job_id, image)
     _save_heatmap(job_id, scores, result["n_rows"], result["n_cols"], orig)
-    _save_noisemap(job_id, orig.width, orig.height)
+    _build_srm_residual(arr, os.path.join(_job_dir(job_id), "noisemap.png"))
 
     return {
         "job_id":            job_id,
+        "filename":          file.filename,
         "verdict":           verdict,
         "confidence":        round(result["max_score"], 4),
         "max_window_score":  round(result["max_score"], 4),
@@ -270,78 +357,202 @@ async def analyze(file: UploadFile = File(...)):
         "window_rows":       result["n_rows"],
         "window_cols":       result["n_cols"],
         "psnr":              None,
-        "method_hint":       _infer_method_hint(verdict, scores),
+        "bitplane_scores":   _bitplane_scores(arr),
         "original_url":      f"/api/original/{job_id}",
         "heatmap_url":       f"/api/heatmap/{job_id}",
         "noise_map_url":     f"/api/noisemap/{job_id}",
+        "spectrum_url":      f"/api/spectrum/{job_id}",
         "window_scores":     [round(s, 4) for s in scores],
     }
 
 
-@app.get("/api/heatmap/{job_id}")
-async def get_heatmap(job_id: str):
-    return FileResponse(_get_artefact(job_id, "heatmap.png"), media_type="image/png")
-
-
-@app.get("/api/noisemap/{job_id}")
-async def get_noisemap(job_id: str):
-    return FileResponse(_get_artefact(job_id, "noisemap.png"), media_type="image/png")
-
-
-_STRATEGY_CONFIGS = {
-    "lsb_sequential": {
-        "gen_type":       "lsb",
-        "strategy":       "sequential",
-        "bit_depth":      1,
-        "step":           1,
-        "message":        _DEFAULT_MESSAGE,
-    },
-    "dct_mid": {
-        "gen_type":         "dct",
-        "coeff_selection":  "mid",
-        "strength":         3.0,
-    },
-    "fft_mid": {
-        "gen_type":   "fft",
-        "freq_band":  "mid",
-        "strength":   8.0,
-    },
-}
-
-
 @app.post("/api/embed")
 async def embed(
-    file:     UploadFile = File(...),
-    strategy: str        = Form(...),
-    capacity: float      = Form(...),
+    file:            UploadFile      = File(...),
+    method:          str             = Form("lsb"),
+    message:         str             = Form(""),
+    cipher:          str             = Form("none"),
+    passphrase:      str             = Form(""),
+    capacity:        Optional[float] = Form(None),
+    # LSB params
+    strategy:        Optional[str]   = Form(None),
+    step:            Optional[int]   = Form(None),
+    bit_depth:       Optional[int]   = Form(None),
+    # DCT / FFT params
+    coeff_selection: Optional[str]   = Form(None),
+    strength:        Optional[float] = Form(None),
+    freq_band:       Optional[str]   = Form(None),
 ):
-    if strategy not in _STRATEGY_CONFIGS:
-        raise HTTPException(
-            status_code=400,
-            detail={"error": f"Unknown strategy {strategy!r}. "
-                             f"Valid: {list(_STRATEGY_CONFIGS)}"},
-        )
+    method = (method or "lsb").lower()
+    data   = await file.read()
+    cover  = _gray_array(_read_image(data))
+    job_id = uuid.uuid4().hex
 
-    data = await file.read()
+    # ── Adaptive (S-UNIWARD): cost-based noise, carries no recoverable message ──
+    if method == "adaptive":
+        config = {
+            "gen_type": "adaptive", "adaptive_mode": "suniward",
+            "capacity_ratio": float(capacity) if capacity is not None else 0.4,
+            "canonical": str(coeff_selection).lower() in ("1", "true", "canonical"),
+        }
+        stego, psnr = _gen.generate_stego(cover, None, config)
+        if stego is None:
+            raise HTTPException(status_code=500, detail={"error": "Embedding failed"})
+        _save_gray(job_id, "original.png", cover)
+        _save_gray(job_id, "stego.png", stego)
+        return {
+            "job_id": job_id, "method": "adaptive", "recoverable": False,
+            "cipher": "none", "psnr": round(float(psnr), 2) if psnr else None,
+            "stego_url": f"/api/stego/{job_id}", "original_url": f"/api/original/{job_id}",
+            "diff_url": f"/api/diff/{job_id}", "spectrum_url": f"/api/spectrum/{job_id}",
+            "bitplane_scores": _bitplane_scores(stego),
+            "pixels_modified": int(cover.size * config["capacity_ratio"]),
+            "note": "Adaptive (S-UNIWARD) embeds statistical noise and carries no recoverable message.",
+        }
+
+    # ── Recoverable methods (LSB / DCT / FFT) ──────────────────────────────────
+    if method not in _RECOVERABLE:
+        raise HTTPException(status_code=400,
+                            detail={"error": f"Unknown method {method!r}"})
+
     try:
-        image = Image.open(io.BytesIO(data)).convert("L")
-    except Exception:
-        raise HTTPException(status_code=400, detail={"error": "Invalid image file"})
+        cipher_id = crypto.cipher_id_from_name(cipher)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail={"error": str(e)})
 
-    config = {**_STRATEGY_CONFIGS[strategy], "capacity_ratio": capacity}
-    stego_arr, psnr = _gen.generate_stego(image, None, config)
-    if stego_arr is None:
-        raise HTTPException(status_code=500, detail={"error": "Embedding failed"})
+    gen, kw, params, method_id = _recoverable_kwargs(
+        method, strategy, step, bit_depth, coeff_selection, strength, freq_band)
 
-    job_id          = uuid.uuid4().hex
-    pixels_modified = int(image.width * image.height * capacity)
-    _save_stego(job_id, stego_arr)
+    try:
+        ciphertext, salt, nonce = crypto.encrypt(message.encode("utf-8"), passphrase, cipher_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail={"error": str(e)})
+
+    bits          = codec.frame(method_id, cipher_id, salt, nonce, params, ciphertext)
+    capacity_bits = int(gen.payload_capacity_bits(cover.shape, **kw))
+    if len(bits) > capacity_bits:
+        max_plain = max(0, capacity_bits // 8 - codec.HEADER_SIZE)
+        raise HTTPException(status_code=400, detail={
+            "error": "Message too large for this image and settings.",
+            "capacity_bytes": capacity_bits // 8,
+            "needed_bytes": len(bits) // 8,
+            "max_message_bytes": max_plain,
+        })
+
+    try:
+        stego = gen.embed_payload(cover, bits, **kw)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail={"error": str(e)})
+
+    psnr = gen._calculate_psnr(cover, stego)
+    _save_gray(job_id, "original.png", cover)
+    _save_gray(job_id, "stego.png", stego)
+
+    # Settings the extractor needs (carried through app state / shown in UI).
+    extract_hint = {"method": method, "cipher": crypto.CIPHER_NAMES[cipher_id], **kw}
 
     return {
         "job_id":          job_id,
+        "method":          method,
+        "cipher":          crypto.CIPHER_NAMES[cipher_id],
+        "recoverable":     True,
+        "encrypted":       cipher_id != crypto.CIPHER_NONE,
+        "psnr":            round(float(psnr), 2) if math.isfinite(psnr) else None,
+        "capacity_bytes":  capacity_bits // 8,
+        "used_bytes":      len(bits) // 8,
+        "message_bytes":   len(ciphertext),
+        "pixels_modified": len(bits),
+        "extract_hint":    extract_hint,
         "stego_url":       f"/api/stego/{job_id}",
-        "psnr":            round(float(psnr), 2) if psnr else None,
-        "pixels_modified": pixels_modified,
+        "original_url":    f"/api/original/{job_id}",
+        "diff_url":        f"/api/diff/{job_id}",
+        "spectrum_url":    f"/api/spectrum/{job_id}",
+        "bitplane_scores": _bitplane_scores(stego),
+    }
+
+
+@app.post("/api/extract")
+async def extract(
+    file:            UploadFile      = File(...),
+    passphrase:      str             = Form(""),
+    method:          Optional[str]   = Form(None),
+    strategy:        Optional[str]   = Form(None),
+    step:            Optional[int]   = Form(None),
+    bit_depth:       Optional[int]   = Form(None),
+    coeff_selection: Optional[str]   = Form(None),
+    strength:        Optional[float] = Form(None),
+    freq_band:       Optional[str]   = Form(None),
+):
+    data = await file.read()
+    arr  = _gray_array(_read_image(data))
+
+    candidates = [method.lower()] if method else list(_RECOVERABLE)
+    found_header = None
+
+    for m in candidates:
+        gen, kw, _params, _mid = _recoverable_kwargs(
+            m, strategy, step, bit_depth, coeff_selection, strength, freq_band)
+        try:
+            header = codec.decode(lambda n: gen.extract_payload(arr, n, **kw))
+        except codec.CodecError:
+            continue  # wrong method / params, or no marker — try the next candidate
+
+        # Marker + CRC matched. Decrypt (this is where a wrong key surfaces).
+        try:
+            plaintext = crypto.decrypt(
+                header["ciphertext"], passphrase,
+                header["cipher_id"], header["salt"], header["nonce"])
+        except crypto.DecryptionError as e:
+            raise HTTPException(status_code=422, detail={"code": "bad_key", "error": str(e)})
+
+        return {
+            "message":   plaintext.decode("utf-8", errors="replace"),
+            "method":    codec.METHOD_NAMES.get(header["method_id"], m),
+            "cipher":    crypto.CIPHER_NAMES.get(header["cipher_id"], "none"),
+            "encrypted": header["cipher_id"] != crypto.CIPHER_NONE,
+            "bytes":     len(plaintext),
+        }
+
+    raise HTTPException(status_code=404, detail={
+        "code": "no_payload",
+        "error": "No recoverable message found. Check the method and settings used to embed.",
+    })
+
+
+@app.post("/api/capacity")
+async def capacity(
+    file:            UploadFile      = File(...),
+    method:          str             = Form("lsb"),
+    strategy:        Optional[str]   = Form(None),
+    step:            Optional[int]   = Form(None),
+    bit_depth:       Optional[int]   = Form(None),
+    coeff_selection: Optional[str]   = Form(None),
+    strength:        Optional[float] = Form(None),
+    freq_band:       Optional[str]   = Form(None),
+):
+    method = (method or "lsb").lower()
+    arr    = _gray_array(_read_image(await file.read()))
+
+    if method not in _RECOVERABLE:
+        # Adaptive uses entropy-budgeted bpp; report a nominal ceiling.
+        bits = int(arr.size * (float(strength) if strength else 0.4))
+        return {"method": method, "recoverable": False,
+                "capacity_bits": bits, "capacity_bytes": bits // 8,
+                "max_message_bytes": 0,
+                "width": int(arr.shape[1]), "height": int(arr.shape[0])}
+
+    gen, kw, _p, _m = _recoverable_kwargs(
+        method, strategy, step, bit_depth, coeff_selection, strength, freq_band)
+    bits = int(gen.payload_capacity_bits(arr.shape, **kw))
+    return {
+        "method":            method,
+        "recoverable":       True,
+        "capacity_bits":     bits,
+        "capacity_bytes":    bits // 8,
+        "header_bytes":      codec.HEADER_SIZE,
+        "max_message_bytes": max(0, bits // 8 - codec.HEADER_SIZE),
+        "width":             int(arr.shape[1]),
+        "height":            int(arr.shape[0]),
     }
 
 
@@ -353,3 +564,94 @@ async def get_original(job_id: str):
 @app.get("/api/stego/{job_id}")
 async def get_stego(job_id: str):
     return FileResponse(_get_artefact(job_id, "stego.png"), media_type="image/png")
+
+
+@app.get("/api/heatmap/{job_id}")
+async def get_heatmap(job_id: str):
+    return FileResponse(_get_artefact(job_id, "heatmap.png"), media_type="image/png")
+
+
+@app.get("/api/noisemap/{job_id}")
+async def get_noisemap(job_id: str, source: str = "original"):
+    """SRM residual. Precomputed for analyze; built on-demand for the embed flow."""
+    if source == "original" and os.path.exists(os.path.join(_tmpdir, job_id, "noisemap.png")):
+        return FileResponse(_get_artefact(job_id, "noisemap.png"), media_type="image/png")
+    name = "stego.png" if source == "stego" else "original.png"
+    out  = os.path.join(_job_dir(job_id), f"noisemap_{source}.png")
+    if not os.path.exists(out):
+        _build_srm_residual(_load_gray_artefact(job_id, name), out)
+    return FileResponse(out, media_type="image/png")
+
+
+@app.get("/api/diff/{job_id}")
+async def get_diff(job_id: str):
+    """Pixel-diff heatmap between cover and stego (embed flow only)."""
+    out = os.path.join(_job_dir(job_id), "diff.png")
+    if not os.path.exists(out):
+        cover = _load_gray_artefact(job_id, "original.png")
+        stego = _load_gray_artefact(job_id, "stego.png")
+        _build_diff(cover, stego, out)
+    return FileResponse(out, media_type="image/png")
+
+
+@app.get("/api/spectrum/{job_id}")
+async def get_spectrum(job_id: str, source: str = "original"):
+    name = "stego.png" if source == "stego" else "original.png"
+    out  = os.path.join(_job_dir(job_id), f"spectrum_{source}.png")
+    if not os.path.exists(out):
+        _build_spectrum(_load_gray_artefact(job_id, name), out)
+    return FileResponse(out, media_type="image/png")
+
+
+
+@app.get("/api/bitplane/{job_id}/{plane}")
+async def get_bitplane(job_id: str, plane: int, source: str = "original"):
+    if not 0 <= plane <= 7:
+        raise HTTPException(status_code=400, detail={"error": "plane must be 0–7"})
+    name = "stego.png" if source == "stego" else "original.png"
+    out  = os.path.join(_job_dir(job_id), f"bitplane_{source}_{plane}.png")
+    if not os.path.exists(out):
+        arr = _load_gray_artefact(job_id, name)
+        Image.fromarray((((arr >> plane) & 1) * 255).astype(np.uint8)).save(out)
+    return FileResponse(out, media_type="image/png")
+
+
+@app.get("/api/sanitize/{job_id}")
+async def get_sanitize(job_id: str):
+    """
+    Return a steganography-stripped version of the original image as a
+    downloadable PNG.
+
+    Strategy: Gaussian-predict then round, in grayscale.
+
+    Why Gaussian blur rather than LSB zeroing + random re-seed:
+    - The model's SRM high-pass filters detect *random* LSBs — both stego
+      payloads and uniform re-seeded noise look the same to it (both are
+      statistically independent of neighbouring pixels).
+    - A clean natural image has LSBs *correlated* with local structure: each
+      pixel's value (including its last bit) is partially predicted by its
+      neighbours.  SRNet learned this correlation as the "clean" signature.
+    - Gaussian blur (σ=0.7) replaces each pixel with a neighbourhood-weighted
+      average.  After rounding to uint8, the LSB is determined by the local
+      gradient and texture context — matching natural image statistics rather
+      than injecting independent noise.
+    - Processing in grayscale (image.convert("L")) avoids the weighted
+      RGB→grayscale conversion artefact when the sanitised file is
+      re-uploaded.
+    """
+    from scipy.ndimage import gaussian_filter
+    out = os.path.join(_job_dir(job_id), "sanitized.png")
+    if not os.path.exists(out):
+        src = os.path.join(_job_dir(job_id), "original.png")
+        if not os.path.exists(src):
+            raise HTTPException(status_code=404, detail={"error": "job not found", "code": "not_found"})
+        arr = np.array(Image.open(src).convert("L"), dtype=np.float32)
+        blurred = gaussian_filter(arr, sigma=0.7)
+        sanitized = np.clip(np.round(blurred), 0, 255).astype(np.uint8)
+        Image.fromarray(sanitized, mode="L").save(out, format="PNG")
+    fname = f"sanitized_{job_id[:8]}.png"
+    return FileResponse(
+        out,
+        media_type="image/png",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
