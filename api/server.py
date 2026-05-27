@@ -6,7 +6,7 @@ Endpoints
 GET  /health
 POST /api/analyze                 — sliding-window detection + bit-plane scores
 POST /api/embed                   — embed a (optionally encrypted) message
-POST /api/extract              stu   — recover a hidden message
+POST /api/extract                 — recover a hidden message
 POST /api/capacity                — max payload per method for an image
 GET  /api/original/{job_id}
 GET  /api/stego/{job_id}
@@ -72,7 +72,7 @@ _KV_KERNEL = np.array([
 # Per-method defaults for the recoverable embed/extract path.
 _LSB_DEFAULTS = dict(strategy="sequential", step=1, bit_depth=1)
 _DCT_DEFAULTS = dict(coeff_selection="mid", strength=3.0)
-_FFT_DEFAULTS = dict(freq_band="mid", strength=8.0)
+_FFT_DEFAULTS = dict(freq_band="mid", strength=32.0)
 _RECOVERABLE  = ("lsb", "dct", "fft")
 
 # ── Global singletons (loaded once in lifespan) ───────────────────────────────
@@ -226,8 +226,21 @@ def _job_dir(job_id: str) -> str:
     return d
 
 
-def _save_gray(job_id: str, name: str, arr: np.ndarray) -> None:
-    Image.fromarray(arr.astype(np.uint8)).save(os.path.join(_job_dir(job_id), name))
+def _save_gray(job_id: str, name: str, arr: np.ndarray,
+               original_rgb: Optional[np.ndarray] = None) -> None:
+    if original_rgb is not None:
+        # Apply the per-pixel luminance delta to all three RGB channels so the
+        # stego image keeps its original colours. FFT embedding spreads its
+        # energy across the whole image, so the per-pixel delta is at most a
+        # few counts — clipping is negligible for natural photographs.
+        gray_orig = np.array(
+            Image.fromarray(original_rgb).convert("L"), dtype=np.int16)
+        delta = arr.astype(np.int16) - gray_orig
+        stego_rgb = np.clip(original_rgb.astype(np.int16) + delta[:, :, np.newaxis],
+                            0, 255).astype(np.uint8)
+        Image.fromarray(stego_rgb, "RGB").save(os.path.join(_job_dir(job_id), name))
+    else:
+        Image.fromarray(arr.astype(np.uint8)).save(os.path.join(_job_dir(job_id), name))
 
 
 def _save_original(job_id: str, image: Image.Image) -> None:
@@ -385,7 +398,10 @@ async def embed(
 ):
     method = (method or "lsb").lower()
     data   = await file.read()
-    cover  = _gray_array(_read_image(data))
+    image  = _read_image(data)
+    cover  = _gray_array(image)
+    # Keep the original RGB array so we can composite the stego back into colour.
+    orig_rgb = np.array(image.convert("RGB"), dtype=np.uint8) if image.mode != "L" else None
     job_id = uuid.uuid4().hex
 
     # ── Adaptive (S-UNIWARD): cost-based noise, carries no recoverable message ──
@@ -445,8 +461,8 @@ async def embed(
         raise HTTPException(status_code=400, detail={"error": str(e)})
 
     psnr = gen._calculate_psnr(cover, stego)
-    _save_gray(job_id, "original.png", cover)
-    _save_gray(job_id, "stego.png", stego)
+    _save_original(job_id, image)
+    _save_gray(job_id, "stego.png", stego, original_rgb=orig_rgb)
 
     # Settings the extractor needs (carried through app state / shown in UI).
     extract_hint = {"method": method, "cipher": crypto.CIPHER_NAMES[cipher_id], **kw}
@@ -622,22 +638,13 @@ async def get_sanitize(job_id: str):
     Return a steganography-stripped version of the original image as a
     downloadable PNG.
 
-    Strategy: Gaussian-predict then round, in grayscale.
+    Strategy: Gaussian blur (σ=0.7) then round, preserving the original
+    colour mode (RGB or grayscale).
 
-    Why Gaussian blur rather than LSB zeroing + random re-seed:
-    - The model's SRM high-pass filters detect *random* LSBs — both stego
-      payloads and uniform re-seeded noise look the same to it (both are
-      statistically independent of neighbouring pixels).
-    - A clean natural image has LSBs *correlated* with local structure: each
-      pixel's value (including its last bit) is partially predicted by its
-      neighbours.  SRNet learned this correlation as the "clean" signature.
-    - Gaussian blur (σ=0.7) replaces each pixel with a neighbourhood-weighted
-      average.  After rounding to uint8, the LSB is determined by the local
-      gradient and texture context — matching natural image statistics rather
-      than injecting independent noise.
-    - Processing in grayscale (image.convert("L")) avoids the weighted
-      RGB→grayscale conversion artefact when the sanitised file is
-      re-uploaded.
+    Gaussian blur rather than LSB zeroing + random re-seed: the model's SRM
+    high-pass filters detect *random* LSBs.  A clean image has LSBs correlated
+    with local structure; the blur reintroduces that correlation rather than
+    injecting independent noise.
     """
     from scipy.ndimage import gaussian_filter
     out = os.path.join(_job_dir(job_id), "sanitized.png")
@@ -645,10 +652,18 @@ async def get_sanitize(job_id: str):
         src = os.path.join(_job_dir(job_id), "original.png")
         if not os.path.exists(src):
             raise HTTPException(status_code=404, detail={"error": "job not found", "code": "not_found"})
-        arr = np.array(Image.open(src).convert("L"), dtype=np.float32)
-        blurred = gaussian_filter(arr, sigma=0.7)
-        sanitized = np.clip(np.round(blurred), 0, 255).astype(np.uint8)
-        Image.fromarray(sanitized, mode="L").save(out, format="PNG")
+        img = Image.open(src)
+        if img.mode == "L":
+            arr = np.array(img, dtype=np.float32)
+            blurred = gaussian_filter(arr, sigma=0.7)
+            sanitized = np.clip(np.round(blurred), 0, 255).astype(np.uint8)
+            Image.fromarray(sanitized, mode="L").save(out, format="PNG")
+        else:
+            arr = np.array(img.convert("RGB"), dtype=np.float32)
+            blurred = np.stack(
+                [gaussian_filter(arr[:, :, c], sigma=0.7) for c in range(3)], axis=2)
+            sanitized = np.clip(np.round(blurred), 0, 255).astype(np.uint8)
+            Image.fromarray(sanitized, mode="RGB").save(out, format="PNG")
     fname = f"sanitized_{job_id[:8]}.png"
     return FileResponse(
         out,

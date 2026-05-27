@@ -70,12 +70,18 @@ class FFTGenerator(BaseGenerator):
         return mask
 
     def _shifted_conjugate_partner(self, rows, cols, h, w):
-        """Calculates the conjugate symmetric partner for coordinates in a shifted FFT."""
-        un_rows = (rows + h // 2) % h
-        un_cols = (cols + w // 2) % w
+        """Calculates the conjugate symmetric partner for coordinates in a shifted FFT.
+
+        numpy fftshift rolls by N//2, so shifted[k] = unshifted[(k - N//2) % N].
+        For even N: (k + N//2) % N == (k - N//2) % N, so the sign doesn't matter.
+        For odd N they differ by 1, which breaks Hermitian symmetry and corrupts
+        extraction — hence (k + h - h//2) % h instead of (k + h//2) % h.
+        """
+        un_rows = (rows + h - h // 2) % h   # shifted → unshifted: (k - N//2) % N
+        un_cols = (cols + w - w // 2) % w
         partner_un_rows = (-un_rows) % h
         partner_un_cols = (-un_cols) % w
-        partner_rows = (partner_un_rows + h // 2) % h
+        partner_rows = (partner_un_rows + h // 2) % h   # unshifted → shifted: (j + N//2) % N
         partner_cols = (partner_un_cols + w // 2) % w
         return partner_rows, partner_cols
 

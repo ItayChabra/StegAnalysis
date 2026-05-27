@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext.jsx';
 import { originalUrl, stegoUrl } from '../../api/client.js';
+import { formatHint } from '../../config/methods.js';
 import styles from './HistoryDrawer.module.css';
 
 const KIND_LABEL = { analyze: 'Analyze', embed: 'Hide', extract: 'Reveal' };
@@ -132,8 +133,10 @@ export default function HistoryDrawer() {
                     {/* Expanded details for embed */}
                     {isOpen && e.kind === 'embed' && e.meta?.hint && (
                       <div className={styles.expand}>
-                        <div className={styles.expandLabel}>To reveal this later:</div>
-                        <pre className={styles.message}>{JSON.stringify(e.meta.hint, null, 2)}</pre>
+                        <div className={styles.expandLabel}>Hidden using:</div>
+                        <p className={styles.message}>{formatHint(e.meta.hint)}</p>
+                        <div className={styles.expandLabel} style={{ marginTop: 8 }}>To reveal:</div>
+                        <p className={styles.message}>Upload the modified image on the Reveal page — settings are filled in automatically.</p>
                       </div>
                     )}
                   </li>

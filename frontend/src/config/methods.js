@@ -76,7 +76,7 @@ export const METHODS = {
       },
       {
         key: 'strength', label: 'Strength (quant. step)', type: 'number',
-        default: 8, min: 2, max: 20, step: 1,
+        default: 32, min: 4, max: 64, step: 1,
       },
     ],
   },
@@ -103,4 +103,13 @@ export function defaultParams(methodId) {
   const out = {};
   for (const p of METHODS[methodId].params) out[p.key] = p.default;
   return out;
+}
+
+// Render an extract_hint object as a plain-English sentence for the history drawer.
+export function formatHint(hint) {
+  if (!hint) return '';
+  const method = METHODS[hint.method];
+  const methodLabel = method?.plain || hint.method;
+  const cipherLabel = !hint.cipher || hint.cipher === 'none' ? 'no encryption' : hint.cipher;
+  return `${methodLabel} · ${cipherLabel}`;
 }
