@@ -1,0 +1,77 @@
+.steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-bottom: 36px;
+}
+
+.step { position: relative; display: flex; flex-direction: column; gap: 8px; }
+
+.num {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  width: 26px; height: 26px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.stepTitle { font-size: 16px; margin: 4px 0 0; }
+
+.stepBody { font-size: 13px; color: var(--text-secondary); line-height: 1.55; margin: 0; flex: 1; }
+
+.link { font-size: 13px; color: var(--accent); text-decoration: none; font-weight: 500; }
+.link:hover { text-decoration: underline; }
+
+.h2 {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  margin: 0 0 16px;
+}
+
+.methods {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+  margin-bottom: 36px;
+}
+
+.method { display: flex; flex-direction: column; gap: 8px; }
+
+.methodHead { display: flex; align-items: center; justify-content: space-between; }
+
+.methodName { font-size: 15px; font-weight: 500; }
+
+.methodBlurb { font-size: 13px; color: var(--text-secondary); line-height: 1.55; margin: 0; flex: 1; }
+
+.recover {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  padding: 3px 0;
+}
+
+.yes { color: var(--verdict-clean); }
+.no { color: var(--text-muted); }
+
+.glossary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px 28px;
+  margin: 0;
+}
+
+.term dt {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 3px;
+}
+
+.term dd { font-size: 13px; color: var(--text-secondary); line-height: 1.5; margin: 0; }
+
+@media (max-width: 820px) {
+  .steps, .methods, .glossary { grid-template-columns: 1fr; }
+}

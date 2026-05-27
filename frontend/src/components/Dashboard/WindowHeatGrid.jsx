@@ -1,5 +1,9 @@
 import styles from './WindowHeatGrid.module.css';
 
+// One cell per actual sliding-window position. Each cell is the model's
+// stego probability for that 256×256 window at top-left (row*stride, col*stride).
+// No pooling, no aggregation — what the model sees, one cell per inference.
+
 function getScoreTier(score) {
   if (score >= 0.90) return '4';
   if (score >= 0.75) return '3';
@@ -23,6 +27,17 @@ const LEGEND = [
   { tier: '4', label: 'Critical',   color: scoreToColor(0.95) },
 ];
 
+// Pick a cell size that keeps the whole grid within ~360px wide. The model's
+// grid size depends on image size — small image → few cells (we make them
+// big); large image → many cells (we shrink them).
+function cellSize(cols) {
+  if (cols <= 3)  return 96;
+  if (cols <= 5)  return 72;
+  if (cols <= 8)  return 54;
+  if (cols <= 12) return 40;
+  return 28;
+}
+
 export default function WindowHeatGrid({
   windowRows,
   windowCols,
@@ -31,14 +46,22 @@ export default function WindowHeatGrid({
   selectedIndex,
 }) {
   if (!windowScores || windowScores.length === 0) return null;
+  const size = cellSize(windowCols);
+  // Keep total entrance time under ~600ms regardless of grid size.
+  const staggerStep = Math.min(20, 600 / Math.max(1, windowScores.length));
 
   return (
     <div className={styles.wrapper}>
-      <p className={styles.heading}>Patch Analysis Grid</p>
+      <p className={styles.heading}>
+        Patch Analysis Grid
+        <span className={styles.subheading}>
+          {` · ${windowRows}×${windowCols} sliding 256-pixel windows`}
+        </span>
+      </p>
 
       <div
         className={styles.grid}
-        style={{ gridTemplateColumns: `repeat(${windowCols}, 1fr)` }}
+        style={{ gridTemplateColumns: `repeat(${windowCols}, ${size}px)` }}
       >
         {windowScores.map((score, i) => (
           <div
@@ -47,8 +70,8 @@ export default function WindowHeatGrid({
             data-tier={getScoreTier(score)}
             data-score={`${Math.round(score * 100)}%`}
             style={{
-              backgroundColor:  scoreToColor(score),
-              animationDelay:   `${i * 20}ms`,
+              backgroundColor: scoreToColor(score),
+              animationDelay:  `${i * staggerStep}ms`,
             }}
             onClick={() => onCellClick?.(i)}
             role="button"

@@ -6,6 +6,9 @@
   padding: 0 24px;
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 50;
 }
 
 /* ── Left side ── */
@@ -13,9 +16,9 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  flex: 1;
 }
 
-/* Diamond logo mark */
 .logoMark {
   position: relative;
   width: 20px;
@@ -44,22 +47,73 @@
   letter-spacing: 0.02em;
 }
 
+/* ── Nav ── */
+.nav {
+  display: flex;
+  gap: 4px;
+}
+
+.navLink {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  color: var(--text-secondary);
+  padding: 7px 14px;
+  border-radius: 999px;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.navLink:hover { color: var(--text-primary); }
+
+.navActive {
+  background: var(--accent-soft);
+  color: var(--text-primary);
+}
+
 /* ── Right side ── */
-.demoToggle {
-  font-family: 'DM Sans', sans-serif;
+.historyBtn {
+  font-family: var(--font-ui);
   font-size: 13px;
   font-weight: 500;
-  padding: 5px 14px;
+  padding: 6px 14px;
   border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--bg-elevated);
   color: var(--text-secondary);
   cursor: pointer;
-  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  transition: border-color 150ms ease, color 150ms ease;
+  flex: 1;
+  justify-content: flex-end;
+  max-width: max-content;
+  margin-left: auto;
 }
 
-.demoToggle.on {
+.historyBtn:hover { border-color: var(--accent); color: var(--text-primary); }
+
+.count {
+  font-family: var(--font-mono);
+  font-size: 11px;
   background: var(--accent);
-  color: #ffffff;
-  border-color: var(--accent);
+  color: #fff;
+  border-radius: 999px;
+  padding: 1px 7px;
+  min-width: 18px;
+  text-align: center;
+}
+
+@media (max-width: 720px) {
+  .wordmark { display: none; }
+  .navLink { padding: 7px 10px; }
+}
+
+@media (max-width: 480px) {
+  .header { padding: 0 12px; }
+  .left { gap: 8px; }
+  .nav { gap: 2px; }
+  .navLink { padding: 6px 8px; font-size: 13px; }
+  .historyBtn { padding: 6px 10px; font-size: 12px; }
 }

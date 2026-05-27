@@ -13,6 +13,10 @@ data/
 *.png
 *.pgm
 
+# ...except the bundled demo-mode sample images the frontend ships with
+!frontend/public/demo/
+!frontend/public/demo/*.png
+
 # Datasets and Auto-generated JSON
 dataset_split.json
 *.csv
