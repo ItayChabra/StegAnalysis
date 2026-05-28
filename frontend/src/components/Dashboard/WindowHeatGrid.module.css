@@ -67,53 +67,55 @@
 /* Tier 0: score < 0.25 — cell nearly invisible, sinks into background */
 .cell[data-tier="0"] {
   background-color: #0f1118;
-  box-shadow: none;
+  box-shadow:
+    inset 0 0 3px rgba(29, 78, 216, 0.06);
 }
 
-/* Tier 1: score 0.25–0.50 — faint cool presence */
+/* Tier 1: score 0.25–0.50 — faint cool presence, now visibly populated */
 .cell[data-tier="1"] {
   box-shadow:
-    inset 0 0 6px  rgba(29,  78,  216, 0.25),
-           0 0 4px  rgba(29,  78,  216, 0.08);
+    inset 0 0 8px  rgba(59, 130, 246, 0.32),
+           0 0 6px  rgba(59, 130, 246, 0.14);
 }
 
 /* Tier 2: score 0.50–0.75 — amber warning, moderate glow */
 .cell[data-tier="2"] {
   box-shadow:
-    inset 0 0 8px  rgba(245, 158,  11, 0.30),
-           0 0 8px  rgba(245, 158,  11, 0.18);
+    inset 0 0 10px rgba(245, 158, 11, 0.38),
+           0 0 10px rgba(245, 158, 11, 0.24);
 }
 
 /* Tier 3: score 0.75–0.90 — hot, clear red glow */
 .cell[data-tier="3"] {
   box-shadow:
-    inset 0 0 10px rgba(239,  68,  68, 0.40),
-           0 0 12px rgba(239,  68,  68, 0.25);
+    inset 0 0 12px rgba(239, 68, 68, 0.48),
+           0 0 14px rgba(239, 68, 68, 0.32);
 }
 
-/* Tier 4: score ≥ 0.90 — critical, pulsing red beacon */
+/* Tier 4: score ≥ 0.90 — critical, pulsing red beacon with inner core flicker */
 .cell[data-tier="4"] {
   box-shadow:
-    inset 0 0 14px rgba(239,  68,  68, 0.55),
-           0 0 18px rgba(239,  68,  68, 0.40),
-           0 0 32px rgba(239,  68,  68, 0.15);
+    inset 0 0 14px rgba(239, 68, 68, 0.55),
+           0 0 18px rgba(239, 68, 68, 0.40),
+           0 0 32px rgba(239, 68, 68, 0.15);
   animation: pulse-critical 1.8s ease-in-out infinite;
 }
 
 @keyframes pulse-critical {
   0%, 100% {
     box-shadow:
-      inset 0 0 14px rgba(239,  68,  68, 0.55),
-             0 0 18px rgba(239,  68,  68, 0.40),
-             0 0 32px rgba(239,  68,  68, 0.15);
+      inset 0 0 14px rgba(239, 68, 68, 0.55),
+             0 0 18px rgba(239, 68, 68, 0.40),
+             0 0 32px rgba(239, 68, 68, 0.15);
   }
   50% {
     box-shadow:
-      inset 0 0 18px rgba(239,  68,  68, 0.70),
-             0 0 26px rgba(239,  68,  68, 0.55),
-             0 0 48px rgba(239,  68,  68, 0.22);
+      inset 0 0 20px rgba(239, 68, 68, 0.78),
+             0 0 28px rgba(239, 68, 68, 0.60),
+             0 0 52px rgba(239, 68, 68, 0.28);
   }
 }
+
 
 /* ── Hover ────────────────────────────────────────────────────────────────── */
 .cell:hover {

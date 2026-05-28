@@ -32,6 +32,7 @@
   height: 8px;
   border-radius: 50%;
   background: var(--accent);
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.65);
   animation: pulse 1.2s ease-in-out infinite;
 }
 
@@ -59,23 +60,50 @@
 }
 
 .track {
+  position: relative;
   width: 100%;
   height: 4px;
   border-radius: 2px;
   background: var(--bg-elevated);
   overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45);
 }
 
 .fill {
+  position: relative;
   height: 100%;
   width: 0%;
   border-radius: 2px;
-  background: var(--accent);
+  background: linear-gradient(90deg, #4a8ff7 0%, var(--accent) 100%);
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.55);
   transition: width 45s ease-out;
+  overflow: hidden;
 }
 
 .fill.running {
   width: 90%;
+}
+
+/* Sheen sweep across the active progress bar */
+.fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 30%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.45) 50%,
+    transparent 100%
+  );
+  animation: progress-sheen 1.6s ease-in-out infinite;
+}
+
+@keyframes progress-sheen {
+  0%   { transform: translateX(-120%) skewX(-18deg); }
+  100% { transform: translateX(420%)  skewX(-18deg); }
 }
 
 .subLabel {

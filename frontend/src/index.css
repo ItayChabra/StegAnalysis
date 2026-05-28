@@ -23,6 +23,24 @@
   --radius-sm: 6px;
   --radius:    10px;
   --radius-lg: 14px;
+
+  /* ── Glow + glass tokens (state-tinted) ── */
+  --glow-accent:        0 0 24px rgba(59, 130, 246, 0.28);
+  --glow-accent-strong: 0 0 40px rgba(59, 130, 246, 0.45);
+  --glow-clean:         0 0 24px rgba(34, 197, 94, 0.30);
+  --glow-warn:          0 0 24px rgba(245, 158, 11, 0.30);
+  --glow-alert:         0 0 24px rgba(239, 68, 68, 0.32);
+
+  --glass-bg:           rgba(26, 30, 40, 0.60);
+  --glass-bg-strong:    rgba(18, 21, 28, 0.72);
+  --glass-border:       rgba(255, 255, 255, 0.07);
+  --glass-highlight:    rgba(255, 255, 255, 0.05);
+
+  --blur-md: 16px;
+  --blur-lg: 22px;
+
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-soft:  cubic-bezier(0.55, 0, 0.68, 0.4);
 }
 
 *,
@@ -39,10 +57,95 @@ body {
 
 body {
   font-family: 'DM Sans', sans-serif;
-  background: var(--bg-base);
+  background-color: var(--bg-base);
+  background-image:
+    radial-gradient(
+      ellipse 60% 40% at 18% 12%,
+      rgba(59, 130, 246, 0.10) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 55% 50% at 88% 92%,
+      rgba(34, 211, 238, 0.07) 0%,
+      transparent 65%
+    ),
+    linear-gradient(180deg, #0a0c10 0%, #07090d 100%);
+  background-attachment: fixed;
   color: var(--text-primary);
   min-height: 100vh;
   min-height: 100dvh;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* ── Ambient corner blooms — fixed full-viewport, behind everything ── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(
+      circle 380px at 0% 0%,
+      rgba(59, 130, 246, 0.32) 0%,
+      rgba(59, 130, 246, 0.10) 35%,
+      transparent 70%
+    ),
+    radial-gradient(
+      circle 380px at 100% 100%,
+      rgba(34, 211, 238, 0.22) 0%,
+      rgba(34, 211, 238, 0.06) 40%,
+      transparent 70%
+    ),
+    radial-gradient(
+      circle 320px at 100% 0%,
+      rgba(59, 130, 246, 0.16) 0%,
+      transparent 65%
+    ),
+    radial-gradient(
+      circle 280px at 0% 100%,
+      rgba(168, 85, 247, 0.12) 0%,
+      transparent 65%
+    );
+  animation: corner-breathe 10s var(--ease-out-soft) infinite alternate;
+}
+
+/* ── Slow diagonal drift — subliminal motion ── */
+body::after {
+  content: '';
+  position: fixed;
+  inset: -10%;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    linear-gradient(
+      125deg,
+      transparent 35%,
+      rgba(59, 130, 246, 0.05) 50%,
+      transparent 65%
+    );
+  background-size: 200% 200%;
+  opacity: 0.7;
+  animation: ambient-drift 24s linear infinite;
+}
+
+/* Ensure app content sits above the ambient layers */
+#root {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+@keyframes corner-breathe {
+  0%   { opacity: 0.75; transform: scale(1); }
+  100% { opacity: 1;    transform: scale(1.04); }
+}
+
+@keyframes ambient-drift {
+  0%   { background-position: 0% 0%; }
+  100% { background-position: 200% 200%; }
 }
 
 @media (prefers-reduced-motion: reduce) {

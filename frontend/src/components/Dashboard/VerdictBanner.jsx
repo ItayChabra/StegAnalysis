@@ -4,7 +4,7 @@ import styles from './VerdictBanner.module.css';
 const VERDICT_MAP = {
   CLEAN:          { label: 'CLEAN',             icon: '✓', cls: styles.clean },
   SUSPICIOUS:     { label: 'SUSPICIOUS',        icon: '⚠', cls: styles.warn  },
-  STEGO_DETECTED: { label: 'HIDDEN DATA FOUND', icon: '🔍', cls: styles.alert },
+  STEGO_DETECTED: { label: 'HIDDEN DATA FOUND', icon: '🚨', cls: styles.alert },
 };
 
 export default function VerdictBanner({ verdict }) {

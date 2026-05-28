@@ -1,23 +1,41 @@
 .banner {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 18px;
   padding: 20px 24px;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--glass-border);
   border-left-width: 4px;
-  background: linear-gradient(135deg, var(--bg-elevated) 0%, var(--bg-surface) 100%);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--blur-md)) saturate(120%);
+  -webkit-backdrop-filter: blur(var(--blur-md)) saturate(120%);
   box-shadow:
     0 4px 20px rgba(0, 0, 0, 0.45),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
   margin-bottom: 20px;
+  overflow: hidden;
 
   /* Animation start state */
   opacity: 0;
   transform: translateY(8px);
   transition:
-    opacity 400ms ease-out,
-    transform 400ms ease-out;
+    opacity 400ms var(--ease-out-soft),
+    transform 400ms var(--ease-out-soft);
+}
+
+/* Subtle inner glow tint, layered behind content */
+.banner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    ellipse 50% 80% at 0% 50%,
+    var(--banner-tint, rgba(59, 130, 246, 0.10)) 0%,
+    transparent 70%
+  );
+  pointer-events: none;
 }
 
 .banner.visible {
@@ -27,6 +45,7 @@
 
 /* Icon container — gives icon a subtle glowing disc behind it */
 .iconWrap {
+  position: relative;
   width: 48px;
   height: 48px;
   border-radius: 50%;
@@ -38,6 +57,37 @@
   line-height: 1;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.07);
+  z-index: 1;
+}
+
+/* Pulsing verdict ring — color picked via CSS var per variant */
+.iconWrap::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 2px solid var(--ring-color, var(--accent));
+  pointer-events: none;
+  transform: translate(-50%, -50%) scale(0.9);
+  animation: verdict-ring-pulse 2.4s var(--ease-out-soft) infinite;
+}
+
+@keyframes verdict-ring-pulse {
+  0% {
+    transform: translate(-50%, -50%) scale(0.9);
+    opacity: 0.7;
+  }
+  70% {
+    transform: translate(-50%, -50%) scale(1.4);
+    opacity: 0;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.4);
+    opacity: 0;
+  }
 }
 
 .text {
@@ -66,26 +116,29 @@
 
 /* ── Colour variants ── */
 .clean {
+  --banner-tint: rgba(34, 197, 94, 0.16);
   border-left-color: var(--verdict-clean);
   box-shadow:
     0 4px 20px rgba(0, 0, 0, 0.45),
-    0 0 28px rgba(34, 197, 94, 0.10),
+    0 0 36px rgba(34, 197, 94, 0.18),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .warn {
+  --banner-tint: rgba(245, 158, 11, 0.18);
   border-left-color: var(--verdict-warn);
   box-shadow:
     0 4px 20px rgba(0, 0, 0, 0.45),
-    0 0 28px rgba(245, 158, 11, 0.10),
+    0 0 36px rgba(245, 158, 11, 0.18),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .alert {
+  --banner-tint: rgba(239, 68, 68, 0.20);
   border-left-color: var(--verdict-alert);
   box-shadow:
     0 4px 20px rgba(0, 0, 0, 0.45),
-    0 0 28px rgba(239, 68, 68, 0.12),
+    0 0 40px rgba(239, 68, 68, 0.22),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
@@ -93,6 +146,6 @@
 .warn   .verdict { color: var(--verdict-warn);  }
 .alert  .verdict { color: var(--verdict-alert); }
 
-.clean  .iconWrap { background: rgba(34,  197, 94,  0.08); border-color: rgba(34,  197, 94,  0.2); }
-.warn   .iconWrap { background: rgba(245, 158, 11,  0.08); border-color: rgba(245, 158, 11,  0.2); }
-.alert  .iconWrap { background: rgba(239, 68,  68,  0.08); border-color: rgba(239, 68,  68,  0.2); }
+.clean  .iconWrap { background: rgba(34,  197, 94,  0.08); border-color: rgba(34,  197, 94,  0.2); --ring-color: var(--verdict-clean); }
+.warn   .iconWrap { background: rgba(245, 158, 11,  0.08); border-color: rgba(245, 158, 11,  0.2); --ring-color: var(--verdict-warn);  }
+.alert  .iconWrap { background: rgba(239, 68,  68,  0.08); border-color: rgba(239, 68,  68,  0.2); --ring-color: var(--verdict-alert); }
