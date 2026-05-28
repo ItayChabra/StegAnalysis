@@ -2,9 +2,11 @@
 .zone {
   position: relative;
   min-height: 220px;
-  border: 1.5px dashed rgba(255, 255, 255, 0.09);
+  border: 1.5px dashed rgba(59, 130, 246, 0.22);
   border-radius: 14px;
-  background: linear-gradient(160deg, var(--bg-surface) 0%, var(--bg-base) 100%);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--blur-md));
+  -webkit-backdrop-filter: blur(var(--blur-md));
   box-shadow:
     0 4px 24px rgba(0, 0, 0, 0.45),
     inset 0 1px 0 rgba(255, 255, 255, 0.04);
@@ -15,28 +17,47 @@
   cursor: pointer;
   margin-top: 24px;
   padding: 36px 24px;
+  overflow: hidden;
   transition:
-    border-color 200ms ease,
-    background 200ms ease,
-    box-shadow 200ms ease;
+    border-color 220ms var(--ease-out-soft),
+    background   220ms var(--ease-out-soft),
+    box-shadow   220ms var(--ease-out-soft),
+    transform    220ms var(--ease-out-soft);
 }
 
 .zone:hover:not(.disabled):not(.hasFile) {
-  border-color: rgba(59, 130, 246, 0.35);
+  border-color: rgba(59, 130, 246, 0.45);
   box-shadow:
     0 6px 32px rgba(0, 0, 0, 0.5),
-    0 0 0 1px rgba(59, 130, 246, 0.1),
+    0 0 0 1px rgba(59, 130, 246, 0.15),
+    0 0 32px rgba(59, 130, 246, 0.10),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .zone.dragOver {
   border-color: var(--accent);
-  border-style: solid;
-  background: linear-gradient(160deg, var(--bg-elevated) 0%, var(--bg-surface) 100%);
+  border-style: dashed;
+  transform: scale(1.005);
+  background:
+    radial-gradient(
+      ellipse at center,
+      rgba(59, 130, 246, 0.10) 0%,
+      var(--glass-bg) 70%
+    );
   box-shadow:
-    0 0 0 1px rgba(59, 130, 246, 0.4),
-    0 0 40px rgba(59, 130, 246, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    0 0 0 1px rgba(59, 130, 246, 0.55),
+    0 0 48px rgba(59, 130, 246, 0.30),
+    inset 0 0 60px rgba(59, 130, 246, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  animation: dropzone-march 0.6s linear infinite;
+}
+
+@keyframes dropzone-march {
+  to {
+    background-position:
+      0 0,
+      24px 0;
+  }
 }
 
 .zone.hasFile {
@@ -168,64 +189,6 @@
   margin-bottom: 18px;
   letter-spacing: 0.02em;
   opacity: 0.75;
-}
-
-/* ── Analyze button ── */
-.analyzeBtn {
-  font-family: 'DM Sans', sans-serif;
-  font-size: 15px;
-  font-weight: 500;
-  color: #ffffff;
-  background: var(--accent);
-  border: none;
-  border-radius: 8px;
-  padding: 11px 32px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  letter-spacing: 0.01em;
-  box-shadow:
-    0 2px 8px rgba(59, 130, 246, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.15);
-  transition:
-    transform 150ms ease,
-    filter 150ms ease,
-    box-shadow 150ms ease;
-}
-
-.analyzeBtn:hover:not(:disabled) {
-  filter: brightness(1.12);
-  transform: scale(1.02);
-  box-shadow:
-    0 4px 20px rgba(59, 130, 246, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.18);
-}
-
-.analyzeBtn:active:not(:disabled) {
-  transform: scale(0.99);
-  filter: brightness(0.97);
-}
-
-.analyzeBtn:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-  box-shadow: none;
-}
-
-/* ── CSS spinner ── */
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.spinner {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.25);
-  border-top-color: #ffffff;
-  animation: spin 0.7s linear infinite;
-  flex-shrink: 0;
 }
 
 /* ── Inline validation error ── */

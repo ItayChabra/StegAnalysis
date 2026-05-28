@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import styles from './DropZone.module.css';
+import ui from '../../styles/ui.module.css';
 import { pgmFileToDataUrl } from '../../utils/pgm.js';
 
 const MAX_SIZE    = 20 * 1024 * 1024; // 20 MB
@@ -123,13 +124,14 @@ export default function DropZone({ analyze, state }) {
             ) : null}
             <p className={styles.filename}>{file.name}</p>
             <button
-              className={styles.analyzeBtn}
+              className={ui.btnPrimary}
+              style={{ width: 'auto' }}
               onClick={(e) => { e.stopPropagation(); onAnalyze(); }}
               disabled={isBusy}
             >
               {isBusy ? (
                 <>
-                  <span className={styles.spinner} aria-hidden="true" />
+                  <span className={ui.spinner} aria-hidden="true" />
                   Analyzing…
                 </>
               ) : (
