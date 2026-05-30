@@ -41,7 +41,9 @@ export async function embedMessage(file, opts = {}) {
 }
 
 // ── Extract ───────────────────────────────────────────────────────────────────
-// opts: { passphrase, method?, strategy?, step?, bit_depth?, coeff_selection?,
+// Reveal-only: locates the hidden payload and returns the ciphertext (b64) +
+// crypto metadata. Decryption is a separate call (see `decryptMessage` below).
+// opts: { method?, strategy?, step?, bit_depth?, coeff_selection?,
 //         strength?, freq_band? }
 export async function extractMessage(file, opts = {}) {
   const form = new FormData();
@@ -50,6 +52,16 @@ export async function extractMessage(file, opts = {}) {
     if (v !== undefined && v !== null && v !== '') form.append(k, String(v));
   }
   return _post('/api/extract', form);
+}
+
+// ── Decrypt ───────────────────────────────────────────────────────────────────
+// payload: { ciphertext_b64, cipher, passphrase, salt_b64, nonce_b64 }
+export async function decryptMessage(payload) {
+  const form = new FormData();
+  for (const [k, v] of Object.entries(payload)) {
+    if (v !== undefined && v !== null) form.append(k, String(v));
+  }
+  return _post('/api/decrypt', form);
 }
 
 // ── Capacity ──────────────────────────────────────────────────────────────────

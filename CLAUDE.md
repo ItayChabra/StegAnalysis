@@ -132,7 +132,7 @@ Recovers a hidden message. Auto-detects the method (LSB/DCT/FFT) for default set
 Given `file` + `method` (+ params), returns the max recoverable payload (`max_message_bytes`) for that image.
 
 ### Recoverable codec (backend)
-`generators/payload_codec.py` frames a 52-byte self-describing header (magic, method, cipher, length, salt, nonce, params, CRC-32) ahead of the ciphertext; `generators/crypto_utils.py` does the AEAD/Fernet crypto. Each generator exposes `embed_payload`/`extract_payload` (deterministic positions) **separate from** the training `run()`/`embed()` paths, which are unchanged.
+`payload/codec.py` frames a 52-byte self-describing header (magic, method, cipher, length, salt, nonce, params, CRC-32) ahead of the ciphertext; `payload/crypto.py` does the AEAD/Fernet crypto. Each generator exposes `embed_payload`/`extract_payload` (deterministic positions) **separate from** the training `run()`/`embed()` paths, which are unchanged.
 
 ### Image GET endpoints (per `job_id`)
 `/api/original`, `/api/stego`, `/api/heatmap`, `/api/noisemap` (SRM residual; `?source=stego` in embed flow), `/api/spectrum` (log-FFT + band rings; `?source=`), `/api/diff` (cover↔stego pixel diff, embed flow), `/api/bitplane/{n}` (bit plane 0–7; `?source=`). All return PNG.
