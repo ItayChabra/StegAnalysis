@@ -22,10 +22,15 @@ export default function useHistory() {
   }, [entries]);
 
   const add = useCallback((entry) => {
-    setEntries((prev) => [
-      { id: crypto.randomUUID(), ts: Date.now(), ...entry },
-      ...prev,
-    ].slice(0, MAX));
+    const created = { id: crypto.randomUUID(), ts: Date.now(), ...entry };
+    setEntries((prev) => [created, ...prev].slice(0, MAX));
+    return created;
+  }, []);
+
+  const updateMeta = useCallback((id, patch) => {
+    setEntries((prev) => prev.map((e) =>
+      e.id === id ? { ...e, meta: { ...e.meta, ...patch } } : e
+    ));
   }, []);
 
   const remove = useCallback((id) => {
@@ -34,5 +39,5 @@ export default function useHistory() {
 
   const clear = useCallback(() => setEntries([]), []);
 
-  return { entries, add, remove, clear };
+  return { entries, add, updateMeta, remove, clear };
 }

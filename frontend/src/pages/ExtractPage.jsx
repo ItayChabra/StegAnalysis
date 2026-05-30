@@ -23,6 +23,7 @@ export default function ExtractPage() {
   const [method, setMethod] = useState('auto');   // 'auto' | 'lsb' | 'dct' | 'fft'
   const [params, setParams] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [historyId, setHistoryId] = useState(null);
 
   // Pre-fill method + params when arriving from the Hide page.
   useEffect(() => {
@@ -57,7 +58,7 @@ export default function ExtractPage() {
     }
     try {
       const data = await extract(file, opts);
-      history.add({
+      const entry = history.add({
         kind: 'extract',
         title: `${METHODS[data.method]?.plain || data.method} · ${file.name}`,
         summary: data.encrypted
@@ -71,11 +72,17 @@ export default function ExtractPage() {
           message:   data.encrypted ? null : data.message,
         },
       });
+      setHistoryId(entry?.id || null);
     } catch { /* surfaced via error */ }
   }
 
   async function onDecrypt() {
-    try { await decrypt(passphrase); } catch { /* surfaced via error */ }
+    try {
+      const data = await decrypt(passphrase);
+      // History lives in sessionStorage (clears on tab close); patching the
+      // plaintext in keeps "Show details" useful for this session only.
+      if (historyId) history.updateMeta(historyId, { message: data.message });
+    } catch { /* surfaced via error */ }
   }
 
   // What we actually show in the message panel — plaintext if available,
@@ -115,7 +122,7 @@ export default function ExtractPage() {
     <div className={ui.page}>
       <h1 className={ui.pageTitle}>Reveal a hidden message</h1>
       <p className={ui.pageSub}>
-        Reveal first — see the raw hidden bytes. If they're encrypted, enter the
+        Reveal first — see the raw hidden bytes. If they&apos;re encrypted, enter the
         key to decrypt them.
       </p>
 
