@@ -1,7 +1,7 @@
 """
 Passphrase-based authenticated encryption for the steganography demo.
 
-Used by the recoverable embed/extract path (see ``payload_codec.py`` and the
+Used by the recoverable embed/extract path (see ``payload.codec`` and the
 ``/api/embed`` + ``/api/extract`` endpoints). A message is optionally encrypted
 before it is framed and embedded; on extraction it is decrypted with the same
 passphrase.
@@ -30,7 +30,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM, ChaCha20Poly1305
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
-# ── Cipher identifiers (must match payload_codec / frontend) ──────────────────
+# ── Cipher identifiers (must match payload.codec / frontend) ─────────────────
 CIPHER_NONE = 0
 CIPHER_AES256GCM = 1
 CIPHER_CHACHA20 = 2

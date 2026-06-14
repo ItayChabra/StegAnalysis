@@ -18,6 +18,8 @@ GET  /api/bitplane/{job_id}/{n}   — single bit-plane (0=LSB … 7=MSB)
 GET  /api/sanitize/{job_id}       — steganography-stripped JPEG download
 """
 
+import base64
+import binascii
 import io
 import math
 import os
@@ -46,8 +48,7 @@ sys.path.insert(0, str(ROOT))
 
 from models.srnet import SRNet                               # noqa: E402
 from generators.unified_generator import UnifiedGenerator    # noqa: E402
-from generators import crypto_utils as crypto                # noqa: E402
-from generators import payload_codec as codec                # noqa: E402
+from payload import codec, crypto                            # noqa: E402
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 DEVICE        = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -230,14 +231,23 @@ def _save_gray(job_id: str, name: str, arr: np.ndarray,
                original_rgb: Optional[np.ndarray] = None) -> None:
     if original_rgb is not None:
         # Apply the per-pixel luminance delta to all three RGB channels so the
-        # stego image keeps its original colours. FFT embedding spreads its
-        # energy across the whole image, so the per-pixel delta is at most a
-        # few counts — clipping is negligible for natural photographs.
+        # stego image keeps its original colours.
         gray_orig = np.array(
             Image.fromarray(original_rgb).convert("L"), dtype=np.int16)
         delta = arr.astype(np.int16) - gray_orig
         stego_rgb = np.clip(original_rgb.astype(np.int16) + delta[:, :, np.newaxis],
                             0, 255).astype(np.uint8)
+        # The extractor reads convert("L"). Clipping a channel at 0/255 (or luma
+        # rounding) can shift a pixel's recovered luma by 1 and flip an embedded
+        # LSB — a single corrupted header bit breaks the whole reveal. Force any
+        # pixel whose round-tripped luma drifts from the target to neutral gray
+        # (R=G=B=arr), which luma-converts back exactly. These are sparse (only
+        # modified + clipped pixels), so colour survives everywhere it safely can.
+        target = arr.astype(np.uint8)
+        recon  = np.array(Image.fromarray(stego_rgb, "RGB").convert("L"), dtype=np.uint8)
+        bad    = recon != target
+        if bad.any():
+            stego_rgb[bad] = target[bad][:, np.newaxis]
         Image.fromarray(stego_rgb, "RGB").save(os.path.join(_job_dir(job_id), name))
     else:
         Image.fromarray(arr.astype(np.uint8)).save(os.path.join(_job_dir(job_id), name))
@@ -490,7 +500,6 @@ async def embed(
 @app.post("/api/extract")
 async def extract(
     file:            UploadFile      = File(...),
-    passphrase:      str             = Form(""),
     method:          Optional[str]   = Form(None),
     strategy:        Optional[str]   = Form(None),
     step:            Optional[int]   = Form(None),
@@ -499,11 +508,17 @@ async def extract(
     strength:        Optional[float] = Form(None),
     freq_band:       Optional[str]   = Form(None),
 ):
+    """
+    Reveal-only: locate the hidden payload and return the raw ciphertext.
+
+    Decryption is a separate step (``/api/decrypt``) so the UI can show the
+    encrypted bytes first and only ask for a passphrase if the data is actually
+    encrypted.
+    """
     data = await file.read()
     arr  = _gray_array(_read_image(data))
 
     candidates = [method.lower()] if method else list(_RECOVERABLE)
-    found_header = None
 
     for m in candidates:
         gen, kw, _params, _mid = _recoverable_kwargs(
@@ -513,26 +528,62 @@ async def extract(
         except codec.CodecError:
             continue  # wrong method / params, or no marker — try the next candidate
 
-        # Marker + CRC matched. Decrypt (this is where a wrong key surfaces).
-        try:
-            plaintext = crypto.decrypt(
-                header["ciphertext"], passphrase,
-                header["cipher_id"], header["salt"], header["nonce"])
-        except crypto.DecryptionError as e:
-            raise HTTPException(status_code=422, detail={"code": "bad_key", "error": str(e)})
-
-        return {
-            "message":   plaintext.decode("utf-8", errors="replace"),
-            "method":    codec.METHOD_NAMES.get(header["method_id"], m),
-            "cipher":    crypto.CIPHER_NAMES.get(header["cipher_id"], "none"),
-            "encrypted": header["cipher_id"] != crypto.CIPHER_NONE,
-            "bytes":     len(plaintext),
+        cipher_id   = header["cipher_id"]
+        ciphertext  = header["ciphertext"]
+        encrypted   = cipher_id != crypto.CIPHER_NONE
+        response = {
+            "method":         codec.METHOD_NAMES.get(header["method_id"], m),
+            "cipher":         crypto.CIPHER_NAMES.get(cipher_id, "none"),
+            "cipher_id":      cipher_id,
+            "encrypted":      encrypted,
+            "bytes":          len(ciphertext),
+            "ciphertext_b64": base64.b64encode(ciphertext).decode("ascii"),
+            "salt_b64":       base64.b64encode(header["salt"]).decode("ascii"),
+            "nonce_b64":      base64.b64encode(header["nonce"]).decode("ascii"),
         }
+        if not encrypted:
+            # No decryption needed — surface the plaintext directly.
+            response["message"] = ciphertext.decode("utf-8", errors="replace")
+        return response
 
     raise HTTPException(status_code=404, detail={
         "code": "no_payload",
         "error": "No recoverable message found. Check the method and settings used to embed.",
     })
+
+
+@app.post("/api/decrypt")
+async def decrypt_payload(
+    ciphertext_b64: str = Form(...),
+    cipher:         str = Form(...),
+    passphrase:     str = Form(""),
+    salt_b64:       str = Form(""),
+    nonce_b64:      str = Form(""),
+):
+    """Decrypt a ciphertext previously returned by ``/api/extract``."""
+    try:
+        ciphertext = base64.b64decode(ciphertext_b64, validate=True)
+        salt       = base64.b64decode(salt_b64, validate=True)  if salt_b64  else b""
+        nonce      = base64.b64decode(nonce_b64, validate=True) if nonce_b64 else b""
+    except (binascii.Error, ValueError):
+        raise HTTPException(status_code=400, detail={"error": "Malformed base64 payload."})
+
+    try:
+        cipher_id = crypto.cipher_id_from_name(cipher)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail={"error": str(e)})
+
+    try:
+        plaintext = crypto.decrypt(ciphertext, passphrase, cipher_id, salt, nonce)
+    except crypto.DecryptionError as e:
+        raise HTTPException(status_code=422, detail={"code": "bad_key", "error": str(e)})
+
+    return {
+        "message":   plaintext.decode("utf-8", errors="replace"),
+        "cipher":    crypto.CIPHER_NAMES.get(cipher_id, "none"),
+        "encrypted": cipher_id != crypto.CIPHER_NONE,
+        "bytes":     len(plaintext),
+    }
 
 
 @app.post("/api/capacity")

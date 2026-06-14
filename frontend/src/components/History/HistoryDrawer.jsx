@@ -121,13 +121,26 @@ export default function HistoryDrawer() {
                     </div>
 
                     {/* Expanded details for extract */}
-                    {isOpen && e.kind === 'extract' && e.meta?.message && (
+                    {isOpen && e.kind === 'extract' && (
                       <div className={styles.expand}>
-                        <div className={styles.expandLabel}>Recovered message</div>
-                        <pre className={styles.message}>{e.meta.message}</pre>
-                        <button className={styles.action} onClick={() => copyMessage(e.meta.message)}>
-                          📋 Copy
-                        </button>
+                        {e.meta?.message ? (
+                          <>
+                            <div className={styles.expandLabel}>Recovered message</div>
+                            <pre className={styles.message}>{e.meta.message}</pre>
+                            <button className={styles.action} onClick={() => copyMessage(e.meta.message)}>
+                              📋 Copy
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <div className={styles.expandLabel}>Encrypted payload</div>
+                            <p className={styles.message}>
+                              {e.meta?.bytes ?? '?'} bytes · {e.meta?.cipher || 'unknown cipher'}.
+                              The plaintext isn&apos;t stored in history — re-run Reveal on the
+                              image and enter the key to decrypt it.
+                            </p>
+                          </>
+                        )}
                       </div>
                     )}
                     {/* Expanded details for embed */}

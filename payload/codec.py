@@ -12,11 +12,11 @@ Layout (big-endian, 52-byte fixed header, then the ciphertext)::
     magic        4s   b"STG1"
     version      B    = 1
     method_id    B    0=lsb 1=dct 2=fft
-    cipher_id    B    see crypto_utils (0=none 1=aes 2=chacha 3=fernet)
+    cipher_id    B    see payload.crypto (0=none 1=aes 2=chacha 3=fernet)
     flags        B    reserved (0)
     payload_len  I    ciphertext length in bytes
-    salt         16s  KDF salt (crypto_utils.SALT_LEN)
-    nonce        12s  AEAD nonce (crypto_utils.NONCE_LEN; zero-padded)
+    salt         16s  KDF salt (crypto.SALT_LEN)
+    nonce        12s  AEAD nonce (crypto.NONCE_LEN; zero-padded)
     params       8s   method-specific (see pack_*_params below)
     crc32        I    CRC-32 of the ciphertext (corruption / wrong-decode guard)
 
@@ -31,7 +31,7 @@ import zlib
 
 import numpy as np
 
-from generators import crypto_utils
+from payload import crypto
 
 MAGIC = b"STG1"
 VERSION = 1
@@ -122,8 +122,8 @@ def frame(method_id, cipher_id, salt, nonce, params, ciphertext):
     ``salt`` / ``nonce`` may be shorter than their fields (e.g. empty for
     cipher=none, or empty nonce for Fernet); they are right-padded with zeros.
     """
-    salt = (salt or b"").ljust(crypto_utils.SALT_LEN, b"\x00")[: crypto_utils.SALT_LEN]
-    nonce = (nonce or b"").ljust(crypto_utils.NONCE_LEN, b"\x00")[: crypto_utils.NONCE_LEN]
+    salt = (salt or b"").ljust(crypto.SALT_LEN, b"\x00")[: crypto.SALT_LEN]
+    nonce = (nonce or b"").ljust(crypto.NONCE_LEN, b"\x00")[: crypto.NONCE_LEN]
     params = (params or b"").ljust(_PARAMS_LEN, b"\x00")[:_PARAMS_LEN]
     crc = zlib.crc32(ciphertext) & 0xFFFFFFFF
 
