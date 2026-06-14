@@ -231,14 +231,23 @@ def _save_gray(job_id: str, name: str, arr: np.ndarray,
                original_rgb: Optional[np.ndarray] = None) -> None:
     if original_rgb is not None:
         # Apply the per-pixel luminance delta to all three RGB channels so the
-        # stego image keeps its original colours. FFT embedding spreads its
-        # energy across the whole image, so the per-pixel delta is at most a
-        # few counts — clipping is negligible for natural photographs.
+        # stego image keeps its original colours.
         gray_orig = np.array(
             Image.fromarray(original_rgb).convert("L"), dtype=np.int16)
         delta = arr.astype(np.int16) - gray_orig
         stego_rgb = np.clip(original_rgb.astype(np.int16) + delta[:, :, np.newaxis],
                             0, 255).astype(np.uint8)
+        # The extractor reads convert("L"). Clipping a channel at 0/255 (or luma
+        # rounding) can shift a pixel's recovered luma by 1 and flip an embedded
+        # LSB — a single corrupted header bit breaks the whole reveal. Force any
+        # pixel whose round-tripped luma drifts from the target to neutral gray
+        # (R=G=B=arr), which luma-converts back exactly. These are sparse (only
+        # modified + clipped pixels), so colour survives everywhere it safely can.
+        target = arr.astype(np.uint8)
+        recon  = np.array(Image.fromarray(stego_rgb, "RGB").convert("L"), dtype=np.uint8)
+        bad    = recon != target
+        if bad.any():
+            stego_rgb[bad] = target[bad][:, np.newaxis]
         Image.fromarray(stego_rgb, "RGB").save(os.path.join(_job_dir(job_id), name))
     else:
         Image.fromarray(arr.astype(np.uint8)).save(os.path.join(_job_dir(job_id), name))
