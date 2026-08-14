@@ -1,0 +1,236 @@
+# Command: python test_kaggle.py --checkpoint srnet_finetuned_best.pth --images 200
+# Date: 2026-07-10
+# Model: srnet_finetuned_best.pth  (BASE — the checkpoint the SteganoGAN finetune started from; "before SteganoGAN")
+
+Checkpoint: srnet_finetuned_best.pth  (saved val_acc: 87.21399730820995)
+Images per folder: 200  |  Aggregation modes: max, mean, vote, p80
+
+Scoring COVER 'BOSS & BOWS2' (200 images)...
+    max: min 0.049  median 0.295  mean 0.347  max 0.894
+   mean: min 0.049  median 0.237  mean 0.250  max 0.735
+   vote: min 0.000  median 0.000  mean 0.219  max 1.000
+    p80: min 0.049  median 0.253  mean 0.279  max 0.818
+Scoring COVER 'Flickr30k' (200 images)...
+    max: min 0.070  median 0.302  mean 0.329  max 0.745
+   mean: min 0.055  median 0.205  mean 0.220  max 0.518
+   vote: min 0.000  median 0.000  mean 0.147  max 1.000
+    p80: min 0.066  median 0.244  mean 0.267  max 0.643
+Scoring COVER 'BOSSbase_256' (200 images)...
+    max: min 0.036  median 0.142  mean 0.187  max 0.747
+   mean: min 0.036  median 0.142  mean 0.187  max 0.747
+   vote: min 0.000  median 0.000  mean 0.105  max 1.000
+    p80: min 0.036  median 0.142  mean 0.187  max 0.747
+Scoring STEGO 'S-UNIWARD 0.2' (200 images)...
+    max: min 0.048  median 0.164  mean 0.207  max 0.859
+   mean: min 0.048  median 0.164  mean 0.207  max 0.859
+   vote: min 0.000  median 0.000  mean 0.110  max 1.000
+    p80: min 0.048  median 0.164  mean 0.207  max 0.859
+Scoring STEGO 'S-UNIWARD 0.4' (200 images)...
+    max: min 0.068  median 0.232  mean 0.310  max 0.929
+   mean: min 0.068  median 0.232  mean 0.310  max 0.929
+   vote: min 0.000  median 0.000  mean 0.280  max 1.000
+    p80: min 0.068  median 0.232  mean 0.310  max 0.929
+Scoring STEGO 'LSB' (200 images)...
+    max: min 0.920  median 0.992  mean 0.989  max 0.999
+   mean: min 0.581  median 0.949  mean 0.928  max 0.994
+   vote: min 0.714  median 1.000  mean 0.995  max 1.000
+    p80: min 0.786  median 0.978  mean 0.974  max 0.998
+Scoring STEGO 'DCT' (200 images)...
+    max: min 0.725  median 0.937  mean 0.932  max 0.996
+   mean: min 0.289  median 0.815  mean 0.786  max 0.941
+   vote: min 0.299  median 1.000  mean 0.949  max 1.000
+    p80: min 0.422  median 0.900  mean 0.884  max 0.965
+Scoring STEGO 'FFT' (200 images)...
+    max: min 0.405  median 0.958  mean 0.942  max 1.000
+   mean: min 0.229  median 0.706  mean 0.694  max 0.942
+   vote: min 0.039  median 0.936  mean 0.860  max 1.000
+    p80: min 0.278  median 0.897  mean 0.859  max 0.984
+Scoring COVER 'SGAN cover' (200 images)...
+    max: min 0.058  median 0.301  mean 0.378  max 0.965
+   mean: min 0.032  median 0.155  mean 0.224  max 0.929
+   vote: min 0.000  median 0.000  mean 0.195  max 1.000
+    p80: min 0.036  median 0.200  mean 0.279  max 0.953
+Scoring STEGO 'SGAN dense' (200 images)...
+    max: min 0.486  median 0.942  mean 0.921  max 0.998
+   mean: min 0.391  median 0.834  mean 0.803  max 0.990
+   vote: min 0.760  median 1.000  mean 0.991  max 1.000
+    p80: min 0.409  median 0.905  mean 0.874  max 0.997
+Scoring STEGO 'SGAN basic' (200 images)...
+    max: min 0.317  median 0.912  mean 0.871  max 0.994
+   mean: min 0.187  median 0.701  mean 0.683  max 0.971
+   vote: min 0.000  median 1.000  mean 0.893  max 1.000
+    p80: min 0.242  median 0.827  mean 0.791  max 0.982
+Scoring STEGO 'SGAN residual' (200 images)...
+    max: min 0.427  median 0.955  mean 0.923  max 0.999
+   mean: min 0.363  median 0.863  mean 0.803  max 0.996
+   vote: min 0.520  median 1.000  mean 0.967  max 1.000
+    p80: min 0.388  median 0.919  mean 0.878  max 0.998
+Scoring COVER 'SGANv3 cover' (200 images)...
+    max: min 0.058  median 0.301  mean 0.378  max 0.965
+   mean: min 0.032  median 0.155  mean 0.224  max 0.929
+   vote: min 0.000  median 0.000  mean 0.195  max 1.000
+    p80: min 0.036  median 0.200  mean 0.279  max 0.953
+Scoring STEGO 'SGANv3 dense' (200 images)...
+    max: min 0.469  median 0.936  mean 0.905  max 0.987
+   mean: min 0.381  median 0.818  mean 0.772  max 0.952
+   vote: min 0.600  median 1.000  mean 0.978  max 1.000
+    p80: min 0.422  median 0.900  mean 0.846  max 0.972
+Scoring STEGO 'SGANv3 basic' (200 images)...
+    max: min 0.247  median 0.893  mean 0.856  max 0.991
+   mean: min 0.172  median 0.686  mean 0.661  max 0.972
+   vote: min 0.000  median 1.000  mean 0.872  max 1.000
+    p80: min 0.200  median 0.804  mean 0.778  max 0.981
+Scoring STEGO 'SGANv3 residual' (200 images)...
+    max: min 0.489  median 0.958  mean 0.935  max 0.998
+   mean: min 0.352  median 0.871  mean 0.824  max 0.992
+   vote: min 0.400  median 1.000  mean 0.967  max 1.000
+    p80: min 0.369  median 0.935  mean 0.892  max 0.997
+
+================================================================================
+AGGREGATION MODE: max
+================================================================================
+  COVER BOSS & BOWS2   n=200  min 0.049  median 0.295  mean 0.347  max 0.894
+  COVER Flickr30k      n=200  min 0.070  median 0.302  mean 0.329  max 0.745
+  COVER BOSSbase_256   n=200  min 0.036  median 0.142  mean 0.187  max 0.747
+  STEGO S-UNIWARD 0.2  n=200  min 0.048  median 0.164  mean 0.207  max 0.859
+  STEGO S-UNIWARD 0.4  n=200  min 0.068  median 0.232  mean 0.310  max 0.929
+  STEGO LSB            n=200  min 0.920  median 0.992  mean 0.989  max 0.999
+  STEGO DCT            n=200  min 0.725  median 0.937  mean 0.932  max 0.996
+  STEGO FFT            n=200  min 0.405  median 0.958  mean 0.942  max 1.000
+  COVER SGAN cover     n=200  min 0.058  median 0.301  mean 0.378  max 0.965
+  STEGO SGAN dense     n=200  min 0.486  median 0.942  mean 0.921  max 0.998
+  STEGO SGAN basic     n=200  min 0.317  median 0.912  mean 0.871  max 0.994
+  STEGO SGAN residual  n=200  min 0.427  median 0.955  mean 0.923  max 0.999
+  COVER SGANv3 cover   n=200  min 0.058  median 0.301  mean 0.378  max 0.965
+  STEGO SGANv3 dense   n=200  min 0.469  median 0.936  mean 0.905  max 0.987
+  STEGO SGANv3 basic   n=200  min 0.247  median 0.893  mean 0.856  max 0.991
+  STEGO SGANv3 residual n=200  min 0.489  median 0.958  mean 0.935  max 0.998
+
+   thresh |     TNR |  TPR bas |  TPR ada |  bal-acc |     LSB |     DCT |     FFT
+  --------------------------------------------------------------------------
+     0.30 |   57.5% |   100.0% |    24.8% |    78.8% |  100.0% |  100.0% |  100.0%
+     0.35 |   63.7% |   100.0% |    19.5% |    81.8% |  100.0% |  100.0% |  100.0%
+     0.40 |   68.9% |   100.0% |    15.5% |    84.4% |  100.0% |  100.0% |  100.0%
+     0.45 |   74.3% |    99.8% |    13.5% |    87.1% |  100.0% |  100.0% |   99.5%
+     0.50 |   79.6% |    99.7% |    10.5% |    89.6% |  100.0% |  100.0% |   99.0%
+     0.55 |   83.8% |    99.7% |     9.2% |    91.7% |  100.0% |  100.0% |   99.0%
+     0.60 |   86.9% |    99.7% |     8.0% |    93.3% |  100.0% |  100.0% |   99.0%
+     0.65 |   89.5% |    99.7% |     6.8% |    94.6% |  100.0% |  100.0% |   99.0%
+     0.70 |   91.1% |    99.7% |     4.8% |    95.4% |  100.0% |  100.0% |   99.0%
+     0.75 |   93.8% |    98.7% |     4.8% |    96.2% |  100.0% |   98.0% |   98.0%
+     0.80 |   95.3% |    98.3% |     3.0% |    96.8% |  100.0% |   97.5% |   97.5%  <-- best
+
+================================================================================
+AGGREGATION MODE: mean
+================================================================================
+  COVER BOSS & BOWS2   n=200  min 0.049  median 0.237  mean 0.250  max 0.735
+  COVER Flickr30k      n=200  min 0.055  median 0.205  mean 0.220  max 0.518
+  COVER BOSSbase_256   n=200  min 0.036  median 0.142  mean 0.187  max 0.747
+  STEGO S-UNIWARD 0.2  n=200  min 0.048  median 0.164  mean 0.207  max 0.859
+  STEGO S-UNIWARD 0.4  n=200  min 0.068  median 0.232  mean 0.310  max 0.929
+  STEGO LSB            n=200  min 0.581  median 0.949  mean 0.928  max 0.994
+  STEGO DCT            n=200  min 0.289  median 0.815  mean 0.786  max 0.941
+  STEGO FFT            n=200  min 0.229  median 0.706  mean 0.694  max 0.942
+  COVER SGAN cover     n=200  min 0.032  median 0.155  mean 0.224  max 0.929
+  STEGO SGAN dense     n=200  min 0.391  median 0.834  mean 0.803  max 0.990
+  STEGO SGAN basic     n=200  min 0.187  median 0.701  mean 0.683  max 0.971
+  STEGO SGAN residual  n=200  min 0.363  median 0.863  mean 0.803  max 0.996
+  COVER SGANv3 cover   n=200  min 0.032  median 0.155  mean 0.224  max 0.929
+  STEGO SGANv3 dense   n=200  min 0.381  median 0.818  mean 0.772  max 0.952
+  STEGO SGANv3 basic   n=200  min 0.172  median 0.686  mean 0.661  max 0.972
+  STEGO SGANv3 residual n=200  min 0.352  median 0.871  mean 0.824  max 0.992
+
+   thresh |     TNR |  TPR bas |  TPR ada |  bal-acc |     LSB |     DCT |     FFT
+  --------------------------------------------------------------------------
+     0.30 |   77.6% |    99.3% |    24.8% |    88.5% |  100.0% |   99.5% |   98.5%
+     0.35 |   83.6% |    98.7% |    19.5% |    91.1% |  100.0% |   99.0% |   97.0%
+     0.40 |   88.7% |    97.3% |    15.5% |    93.0% |  100.0% |   97.5% |   94.5%
+     0.45 |   92.4% |    96.0% |    13.5% |    94.2% |  100.0% |   96.5% |   91.5%
+     0.50 |   93.9% |    94.7% |    10.5% |    94.3% |  100.0% |   96.0% |   88.0%  <-- best
+     0.55 |   95.6% |    92.2% |     9.2% |    93.9% |  100.0% |   94.5% |   82.0%
+     0.60 |   96.5% |    89.8% |     8.0% |    93.2% |   99.5% |   93.0% |   77.0%
+     0.65 |   97.6% |    85.5% |     6.8% |    91.5% |   99.5% |   91.0% |   66.0%
+     0.70 |   98.2% |    77.7% |     4.8% |    87.9% |   98.5% |   82.5% |   52.0%
+     0.75 |   99.0% |    69.8% |     4.8% |    84.4% |   96.5% |   72.5% |   40.5%
+     0.80 |   99.4% |    59.5% |     3.0% |    79.5% |   95.5% |   55.5% |   27.5%
+
+================================================================================
+AGGREGATION MODE: vote
+================================================================================
+  COVER BOSS & BOWS2   n=200  min 0.000  median 0.000  mean 0.219  max 1.000
+  COVER Flickr30k      n=200  min 0.000  median 0.000  mean 0.147  max 1.000
+  COVER BOSSbase_256   n=200  min 0.000  median 0.000  mean 0.105  max 1.000
+  STEGO S-UNIWARD 0.2  n=200  min 0.000  median 0.000  mean 0.110  max 1.000
+  STEGO S-UNIWARD 0.4  n=200  min 0.000  median 0.000  mean 0.280  max 1.000
+  STEGO LSB            n=200  min 0.714  median 1.000  mean 0.995  max 1.000
+  STEGO DCT            n=200  min 0.299  median 1.000  mean 0.949  max 1.000
+  STEGO FFT            n=200  min 0.039  median 0.936  mean 0.860  max 1.000
+  COVER SGAN cover     n=200  min 0.000  median 0.000  mean 0.195  max 1.000
+  STEGO SGAN dense     n=200  min 0.760  median 1.000  mean 0.991  max 1.000
+  STEGO SGAN basic     n=200  min 0.000  median 1.000  mean 0.893  max 1.000
+  STEGO SGAN residual  n=200  min 0.520  median 1.000  mean 0.967  max 1.000
+  COVER SGANv3 cover   n=200  min 0.000  median 0.000  mean 0.195  max 1.000
+  STEGO SGANv3 dense   n=200  min 0.600  median 1.000  mean 0.978  max 1.000
+  STEGO SGANv3 basic   n=200  min 0.000  median 1.000  mean 0.872  max 1.000
+  STEGO SGANv3 residual n=200  min 0.400  median 1.000  mean 0.967  max 1.000
+
+   thresh |     TNR |  TPR bas |  TPR ada |  bal-acc |     LSB |     DCT |     FFT
+  --------------------------------------------------------------------------
+     0.30 |   79.9% |    99.3% |    19.5% |    89.6% |  100.0% |   99.5% |   98.5%
+     0.35 |   80.7% |    99.0% |    19.5% |    89.8% |  100.0% |   99.0% |   98.0%
+     0.40 |   82.9% |    98.8% |    19.5% |    90.9% |  100.0% |   99.0% |   97.5%
+     0.45 |   84.7% |    98.2% |    19.5% |    91.4% |  100.0% |   98.0% |   96.5%
+     0.50 |   84.7% |    97.5% |    19.5% |    91.1% |  100.0% |   97.5% |   95.0%
+     0.55 |   86.6% |    96.5% |    19.5% |    91.5% |  100.0% |   97.0% |   92.5%  <-- best
+     0.60 |   86.7% |    95.8% |    19.5% |    91.3% |  100.0% |   97.0% |   90.5%
+     0.65 |   88.0% |    94.2% |    19.5% |    91.1% |  100.0% |   95.5% |   87.0%
+     0.70 |   88.5% |    93.0% |    19.5% |    90.8% |  100.0% |   95.0% |   84.0%
+     0.75 |   89.2% |    91.0% |    19.5% |    90.1% |   99.5% |   94.0% |   79.5%
+     0.80 |   90.1% |    88.2% |    19.5% |    89.1% |   99.5% |   90.5% |   74.5%
+
+================================================================================
+AGGREGATION MODE: p80
+================================================================================
+  COVER BOSS & BOWS2   n=200  min 0.049  median 0.253  mean 0.279  max 0.818
+  COVER Flickr30k      n=200  min 0.066  median 0.244  mean 0.267  max 0.643
+  COVER BOSSbase_256   n=200  min 0.036  median 0.142  mean 0.187  max 0.747
+  STEGO S-UNIWARD 0.2  n=200  min 0.048  median 0.164  mean 0.207  max 0.859
+  STEGO S-UNIWARD 0.4  n=200  min 0.068  median 0.232  mean 0.310  max 0.929
+  STEGO LSB            n=200  min 0.786  median 0.978  mean 0.974  max 0.998
+  STEGO DCT            n=200  min 0.422  median 0.900  mean 0.884  max 0.965
+  STEGO FFT            n=200  min 0.278  median 0.897  mean 0.859  max 0.984
+  COVER SGAN cover     n=200  min 0.036  median 0.200  mean 0.279  max 0.953
+  STEGO SGAN dense     n=200  min 0.409  median 0.905  mean 0.874  max 0.997
+  STEGO SGAN basic     n=200  min 0.242  median 0.827  mean 0.791  max 0.982
+  STEGO SGAN residual  n=200  min 0.388  median 0.919  mean 0.878  max 0.998
+  COVER SGANv3 cover   n=200  min 0.036  median 0.200  mean 0.279  max 0.953
+  STEGO SGANv3 dense   n=200  min 0.422  median 0.900  mean 0.846  max 0.972
+  STEGO SGANv3 basic   n=200  min 0.200  median 0.804  mean 0.778  max 0.981
+  STEGO SGANv3 residual n=200  min 0.369  median 0.935  mean 0.892  max 0.997
+
+   thresh |     TNR |  TPR bas |  TPR ada |  bal-acc |     LSB |     DCT |     FFT
+  --------------------------------------------------------------------------
+     0.30 |   67.4% |    99.8% |    24.8% |    83.6% |  100.0% |  100.0% |   99.5%
+     0.35 |   75.5% |    99.7% |    19.5% |    87.6% |  100.0% |  100.0% |   99.0%
+     0.40 |   82.3% |    99.7% |    15.5% |    91.0% |  100.0% |  100.0% |   99.0%
+     0.45 |   87.9% |    99.2% |    13.5% |    93.5% |  100.0% |   99.0% |   98.5%
+     0.50 |   91.1% |    98.5% |    10.5% |    94.8% |  100.0% |   98.5% |   97.0%
+     0.55 |   92.3% |    97.3% |     9.2% |    94.8% |  100.0% |   98.0% |   94.0%
+     0.60 |   93.6% |    96.8% |     8.0% |    95.2% |  100.0% |   97.5% |   93.0%
+     0.65 |   94.9% |    96.5% |     6.8% |    95.7% |  100.0% |   97.0% |   92.5%
+     0.70 |   96.0% |    96.0% |     4.8% |    96.0% |  100.0% |   96.5% |   91.5%
+     0.75 |   97.7% |    94.7% |     4.8% |    96.2% |  100.0% |   96.5% |   87.5%  <-- best
+     0.80 |   98.3% |    92.3% |     3.0% |    95.3% |   99.5% |   93.0% |   84.5%
+
+################################################################################
+BEST OPERATING POINT PER MODE  (ranked by balanced accuracy)
+################################################################################
+    mode |  thresh |     TNR |  TPR basic |  TPR adapt |  bal-acc
+  ----------------------------------------------------------------
+     max |    0.80 |   95.3% |      98.3% |       3.0% |    96.8%
+     p80 |    0.75 |   97.7% |      94.7% |       4.8% |    96.2%
+    mean |    0.50 |   93.9% |      94.7% |      10.5% |    94.3%
+    vote |    0.55 |   86.6% |      96.5% |      19.5% |    91.5%
+  ----------------------------------------------------------------
+  WINNER: mode=max  threshold=0.80  bal-acc=96.8%
+################################################################################
