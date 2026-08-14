@@ -111,10 +111,15 @@ if __name__ == '__main__':
     ap = argparse.ArgumentParser()
     ap.add_argument('--checkpoint', default='srnet_steganogan_best.pth')
     ap.add_argument('--gan-images', type=int, default=200)
-    ap.add_argument('--adaptive-images', type=int, default=2000)
+    ap.add_argument('--adaptive-images', type=int, default=2000,
+                    help='use 10000 to score the full BOSSbase-derived folders')
+    ap.add_argument('--adaptive-only', action='store_true',
+                    help='skip the SteganoGAN section (S-UNIWARD is the slow, '
+                         'prefix-sensitive one worth re-running at full size)')
     a = ap.parse_args()
 
     m = load_model(a.checkpoint)
     tt = transforms.ToTensor()
-    report("SteganoGAN — detection rate vs matched cover", GAN_SET, m, tt, a.gan_images)
-    report("S-UNIWARD — larger sample vs MATCHED cover", ADAPTIVE_SET, m, tt, a.adaptive_images)
+    if not a.adaptive_only:
+        report("SteganoGAN — detection rate vs matched cover", GAN_SET, m, tt, a.gan_images)
+    report("S-UNIWARD — vs MATCHED cover", ADAPTIVE_SET, m, tt, a.adaptive_images)

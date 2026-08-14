@@ -290,19 +290,20 @@ columns are directly comparable.
 | SteganoGAN — dense | **97.5%** | `verify_readme_numbers.py`, n=200 |
 | SteganoGAN — basic | **93.5%** | `verify_readme_numbers.py`, n=200 |
 | SteganoGAN — residual | **88.0%** | `verify_readme_numbers.py`, n=200 |
-| S-UNIWARD @ 0.4 bpp | **18.6%** ⚠️ | `verify_readme_numbers.py`, n=2000 |
-| S-UNIWARD @ 0.2 bpp | **6.7%** ⚠️ | `verify_readme_numbers.py`, n=2000 |
+| S-UNIWARD @ 0.4 bpp | **14.3%** ⚠️ | `verify_readme_numbers.py`, **n=10000 (full)** |
+| S-UNIWARD @ 0.2 bpp | **1.9%** ⚠️ | `verify_readme_numbers.py`, **n=10000 (full)** |
 | **Balanced accuracy** (basic-driven, excludes adaptive and GAN) | **97.4%** | `test_kaggle.py`, n=200 |
 
 `test_kaggle.py` puts SteganoGAN in an informational `gan` group that is excluded
 from the threshold sweep, so it reports GAN score *distributions* but no
-detection rate. `scripts/verify_readme_numbers.py` re-scores those folders (and
-adaptive, at a 10× larger sample) to produce the percentages above.
+detection rate. `scripts/verify_readme_numbers.py` re-scores those folders, and
+scores S-UNIWARD across the **complete** 10,000-image folders — see the sampling
+note below for why partial samples of that set are not trustworthy.
 
 Two caveats on the pooled TNR: it mixes four cover sets whose difficulty differs
-(measured separately at 0.80: `BOSSbase_256` 97.7%, `SGAN cover` 91.5%), and it
-includes `BOSSbase_256` at n=200, which is the prefix-sensitive folder described
-below. Read it as an aggregate, not as a per-dataset guarantee.
+(measured separately at 0.80: `BOSSbase_256` **99.4%** at full folder size,
+`SGAN cover` 91.5%), and its `BOSSbase_256` contribution is an n=200 sample of a
+folder that is not uniform. Read it as an aggregate, not a per-dataset guarantee.
 
 ### Threshold sweep — the false-positive trade-off
 
@@ -317,13 +318,16 @@ below. Read it as an aggregate, not as a per-dataset guarantee.
 
 Adaptive is the weak method, but it is **weak, not inverted** — measured against
 its **matched cover** (`BOSSbase_256`, the exact source the SUNI files were
-derived from), the signal is correctly ordered and monotonic in payload:
+derived from), the signal is correctly ordered and monotonic in payload.
 
-| Set (n=2000) | Median score | Δ vs matched cover |
+Measured on the **complete 10,000-image folders**, for both current checkpoints
+(`suniward_full_bench.log`):
+
+| Set (n=10000) | `srnet_steganogan_best` | `srnet_finetuned_best` |
 |---|---|---|
-| `BOSSbase_256` (matched cover) | 0.194 | — |
-| S-UNIWARD @ 0.2 bpp | 0.237 | **+0.043** |
-| S-UNIWARD @ 0.4 bpp | 0.410 | **+0.216** |
+| `BOSSbase_256` (matched cover) | 0.120 | 0.152 |
+| S-UNIWARD @ 0.2 bpp | 0.148 (**+0.028**) | 0.186 (**+0.034**) |
+| S-UNIWARD @ 0.4 bpp | 0.274 (**+0.154**) | 0.322 (**+0.170**) |
 
 The separation is real but small, so detection depends heavily on where the
 threshold sits — and the deployed 0.80 threshold is tuned for cover TNR across
@@ -331,26 +335,33 @@ threshold sits — and the deployed 0.80 threshold is tuned for cover TNR across
 
 | Threshold | TNR (matched cover) | S-UNIWARD 0.2 | S-UNIWARD 0.4 |
 |---|---|---|---|
-| 0.30 | 66.6% | 42.3% | **59.2%** |
-| 0.50 | 82.9% | 26.3% | 44.0% |
-| 0.65 | 91.0% | 17.0% | 33.5% |
-| 0.80 | 97.7% | 6.7% | 18.6% |
+| 0.30 | 84.1% | 21.6% | **47.2%** |
+| 0.50 | 93.5% | 10.1% | 31.3% |
+| 0.65 | 97.3% | 5.5% | 22.9% |
+| 0.80 | 99.4% | 1.9% | 14.3% |
 
-So adaptive detection ranges from **~59% at a permissive threshold to ~19% at the
-deployed one** for 0.4 bpp — the cost of that sensitivity is cover TNR collapsing
-from 97.7% to 66.6%. There is no single threshold that serves both adaptive and
-the low-false-positive requirement, which is exactly why the demo operating point
-sacrifices adaptive.
+So adaptive detection ranges from **~47% at a permissive threshold to ~14% at the
+deployed one** for 0.4 bpp, and the 0.2 bpp payload is essentially undetected at
+any usable threshold. There is no single threshold serving both adaptive and the
+low-false-positive requirement, which is why the demo operating point sacrifices
+adaptive.
+
+The two checkpoints are near-equivalent here. At 0.80 they are within noise
+(14.3% vs 13.9%, both at 99.4% TNR); at 0.30 the older `srnet_finetuned_best` is
+slightly more sensitive (53.3% vs 47.2%) but with lower TNR (79.5% vs 84.1%) —
+the same trade, not a better model.
 
 > **Two measurement traps this project hit, recorded so they aren't repeated.**
 > **(1) Wrong baseline.** Comparing S-UNIWARD against `BOSS & BOWS2` (a
-> *different* cover dataset, median 0.237) instead of its matched `BOSSbase_256`
-> cover makes the signal look inverted. It is not — that comparison is invalid.
-> **(2) Prefix sampling.** `test_kaggle.py` takes `sorted(glob)[:n]`, and the
-> first 200 of the 10,000 BOSSbase-derived files score systematically lower than
-> the folder as a whole (cover median 0.105 at n=200 vs 0.194 at n=2000). Small
-> `--images` values distort every BOSSbase-derived number, adaptive included; the
-> Flickr30k / BOSS&BOWS2 / LSB / DCT / FFT folders are stable to ±0.008.
+> *different* cover dataset) instead of its matched `BOSSbase_256` cover makes
+> the signal look inverted. It is not — that comparison is invalid.
+> **(2) Partial samples of `BOSSbase_256` are unreliable.** `test_kaggle.py`
+> takes `sorted(glob)[:n]`, and that folder is not uniform along its filename
+> order: the same checkpoint gives a cover median of 0.105 at n=200, 0.194 at
+> n=2000 and 0.120 at the full n=10000 — non-monotonic, so no small `n` is
+> "close enough". **Score the whole folder for any adaptive claim.** The
+> Flickr30k / BOSS&BOWS2 / LSB / DCT / FFT folders do not have this problem
+> (stable to ±0.008 between n=200 and n=1500).
 
 Closing the adaptive gap is the known research frontier for content-adaptive
 embedding at low payload, not a tuning bug. It requires wiring `canonical=True`
@@ -370,8 +381,12 @@ LSB/DCT/FFT/covers and excludes both adaptive and SteganoGAN by construction.
 # Full sweep: 4 aggregation modes x 11 thresholds x every target folder
 python test_kaggle.py --checkpoint srnet_steganogan_best.pth --images 200
 
-# Matched-cover detection rates for SteganoGAN + a large adaptive sample
+# Matched-cover detection rates for SteganoGAN + adaptive
 python scripts/verify_readme_numbers.py --checkpoint srnet_steganogan_best.pth
+
+# S-UNIWARD only, full 10,000-image folders (the definitive adaptive number)
+python scripts/verify_readme_numbers.py --checkpoint srnet_steganogan_best.pth \
+       --adaptive-only --adaptive-images 10000
 ```
 
 `test_kaggle.py` covers covers/LSB/DCT/FFT/S-UNIWARD plus three SteganoGAN
@@ -390,8 +405,9 @@ Three things worth knowing before trusting a number:
 
 > **`--images` is a prefix, not a sample.** Folders are read as
 > `sorted(glob)[:n]`, so a low `--images` scores the alphabetically first files.
-> For the 10,000-file BOSSbase-derived folders that prefix is not representative;
-> use a few thousand when adaptive numbers matter.
+> The 10,000-file BOSSbase-derived folders are not uniform along that order and
+> the bias is not even monotonic in `n`, so score the **whole folder** for any
+> adaptive claim rather than trusting a larger-but-still-partial sample.
 
 > **Compare stego against its matched cover.** Each stego folder has a cover
 > folder it was derived from. Scoring it against an unrelated cover set produces
@@ -402,6 +418,8 @@ Benchmark artifacts in the repo:
 - `kaggle_bench_conclusion.md` — SteganoGAN fine-tune before/after (⚠️ its
   adaptive "inverted signal" section uses the wrong cover baseline; see Results)
 - `kaggle_bench_finetuned_best.log` / `kaggle_bench_steganogan_best.log` — raw sweeps
+- `suniward_full_bench.log` — **full-folder (n=10000) S-UNIWARD run for both
+  current checkpoints**; the source of the adaptive figures in Results
 - `mega_test_epoch15.log` / `mega_test_best_epoch16.log` — 1500-image runs of the
   pre-SteganoGAN checkpoint
 - `steganogan_finetune.log`, `finetune_steganogan_history.json` — training traces

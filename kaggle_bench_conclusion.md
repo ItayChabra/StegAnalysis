@@ -21,10 +21,11 @@ Balanced accuracy in the sweep is **basic-driven** `(TNR + TPR_basic)/2` and **e
 At the loose end (`max @0.30`) adaptive is 24.8% (before) vs 19.0% (after) — i.e. the finetune **slightly reduced** adaptive sensitivity.
 
 > \* **These adaptive figures are under-sampled** — they come from the first 200
-> of 10,000 BOSSbase-derived files, which score systematically low. Re-measured
-> at n=2000 the same checkpoint gives 6.7% (0.2 bpp) and 18.6% (0.4 bpp) at
-> `max @0.80`. See the correction in §4. The cover/LSB/DCT/FFT rows are
-> unaffected — those folders are stable to ±0.008 between n=200 and n=1500.
+> of 10,000 BOSSbase-derived files, and that folder is not uniform along filename
+> order. Re-measured on the full folder, the same checkpoint gives 1.9% (0.2 bpp)
+> and 14.3% (0.4 bpp) at `max @0.80`. See the correction in §4. The
+> cover/LSB/DCT/FFT rows are unaffected — those folders are stable to ±0.008
+> between n=200 and n=1500.
 
 ## 2. SteganoGAN detection — the target of the finetune (max-mode median score)
 
@@ -51,33 +52,35 @@ The finetune **lowered cover suspicion scores** (max median): BOSS&BOWS2 0.295�
 > S-UNIWARD against **BOSS&BOWS2**, which is a *different cover dataset*, and
 > concluded the signal was "inverted". That comparison is invalid. The SUNI files
 > are derived from **BOSSbase_256**, and against that matched cover the signal is
-> correctly ordered and monotonic in payload. The numbers below have been
-> re-measured with `scripts/verify_readme_numbers.py` at n=2000 (the original
-> n=200 run also under-sampled: `test_kaggle.py` reads `sorted(glob)[:n]`, and the
-> first 200 of 10,000 BOSSbase files score systematically low).
+> correctly ordered and monotonic in payload. The original n=200 run was also
+> under-sampled: `test_kaggle.py` reads `sorted(glob)[:n]`, and that folder is not
+> uniform along filename order. The numbers below are re-measured on the
+> **complete 10,000-image folders** (`suniward_full_bench.log`).
 
-Re-measured on `srnet_steganogan_best.pth`, max mode, n=2000, **matched cover**:
+Full-folder (n=10000), max mode, **matched cover**:
 
-| Source                          | max median | Δ vs matched cover |
-|---------------------------------|------------|--------------------|
-| BOSSbase_256 (**matched** cover)| 0.194      | —                  |
-| S-UNIWARD 0.2                   | 0.237      | **+0.043**         |
-| S-UNIWARD 0.4                   | 0.410      | **+0.216**         |
-| *BOSS&BOWS2 (unrelated cover)*  | *0.237*    | *not a valid baseline* |
+| Source                          | steganogan_best | finetuned_best |
+|---------------------------------|-----------------|----------------|
+| BOSSbase_256 (**matched** cover)| 0.120           | 0.152          |
+| S-UNIWARD 0.2                   | 0.148 (+0.028)  | 0.186 (+0.034) |
+| S-UNIWARD 0.4                   | 0.274 (+0.154)  | 0.322 (+0.170) |
+| *BOSS&BOWS2 (unrelated cover)*  | *0.237*         | *0.295* — not a valid baseline |
 
-Detection rate by threshold (same run):
+Detection rate by threshold, `srnet_steganogan_best.pth`:
 
 | Threshold | TNR (matched cover) | S-UNIWARD 0.2 | S-UNIWARD 0.4 |
 |-----------|---------------------|---------------|---------------|
-| 0.30      | 66.6%               | 42.3%         | **59.2%**     |
-| 0.50      | 82.9%               | 26.3%         | 44.0%         |
-| 0.65      | 91.0%               | 17.0%         | 33.5%         |
-| 0.80      | 97.7%               | 6.7%          | 18.6%         |
+| 0.30      | 84.1%               | 21.6%         | **47.2%**     |
+| 0.50      | 93.5%               | 10.1%         | 31.3%         |
+| 0.65      | 97.3%               | 5.5%          | 22.9%         |
+| 0.80      | 99.4%               | 1.9%          | 14.3%         |
 
-So adaptive is **weak, not broken**: ~59% detection at 0.4 bpp is reachable, but
-only at a threshold that drops cover TNR to 66.6%. The deployed 0.80 operating
-point is tuned for low false positives and sits far above where adaptive
-separates. The SteganoGAN finetune neither addressed nor could address this.
+So adaptive is **weak, not broken**: ~47% detection at 0.4 bpp is reachable, but
+only at a threshold that drops cover TNR to 84.1%; 0.2 bpp is essentially
+undetected at any usable threshold. The deployed 0.80 operating point is tuned
+for low false positives and sits far above where adaptive separates. The
+SteganoGAN finetune neither addressed nor could address this — at 0.80 the two
+checkpoints are within noise of each other (14.3% vs 13.9%, both at 99.4% TNR).
 
 ---
 
