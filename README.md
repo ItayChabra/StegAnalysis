@@ -231,6 +231,7 @@ only that file for tuning runs.
 
 | Layer | Constraint | Default |
 |---|---|---|
+| 1 | Baseline — remaining slots drawn from the EA population at random | rest of batch |
 | 2 | Low-capacity floor — hard, near-invisible payloads below 0.12 bpp | 15% of free slots |
 | 3 | Per-niche cap — no single niche dominates a batch | 40% of free slots |
 | 4 | FFT combined cap — all FFT sub-niches together | 25% of free slots |
