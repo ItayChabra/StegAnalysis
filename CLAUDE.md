@@ -7,12 +7,12 @@
 
 ## 1. Project Overview
 
-This is a full-stack **AI-powered steganography detection system** built for a live demonstration. The system detects hidden data embedded in images using three basic techniques (LSB, DCT, FFT) and one adaptive algorithm (S-UNIWARD).
+This is a full-stack **AI-powered steganography detection system** built for a live demonstration. It detects hidden data embedded by three classical techniques (LSB, DCT, FFT), one content-adaptive algorithm (S-UNIWARD), and one GAN-learned embedder (SteganoGAN).
 
 The project consists of:
 1. **Backend (Python/PyTorch):** A custom triple-branch convolutional network called **SRNet**.
 2. **API (FastAPI):** A REST interface connecting the ML inference to the client.
-3. **Generators (Python):** Scripts to embed steganographic payloads for training and demo. The adaptive generator (`adaptive_gen.py`) implements S-UNIWARD with both a simplified path (default) and a canonical Daubechies-8 back-convolution path (`canonical=True`).
+3. **Generators (Python):** Scripts to embed steganographic payloads for training and demo. `adaptive_gen.py` implements S-UNIWARD with a simplified path and a canonical Daubechies-8 back-convolution path (`canonical=True`); `steganogan_gen.py` wraps a vendored pretrained SteganoGAN encoder.
 4. **Training pipeline (Python):** An evolutionary algorithm (EA) breeds generator genomes to maximise fool rate against the current model. See `training/` for all components.
 5. **Frontend (React/Vite):** A non-technical, highly visual UI designed to make the model's reasoning intuitive for a general audience.
 
@@ -26,7 +26,8 @@ The project consists of:
 ├── main.py                    ← training entry point (calls training/train_hybrid.py)
 ├── test_kaggle.py             ← sliding-window benchmark; compares aggregation modes
 ├── class_demo.py              ← CLI demo (sliding-window detection on a single image)
-├── srnet_finetuned_best.pth   ← current best model weights (val_acc ≈ 87.6%)
+├── srnet_steganogan_best.pth  ← current best / deployed weights (val_acc ≈ 88.2%)
+├── srnet_finetuned_best.pth   ← previous weights; base of the above fine-tune
 ├── dataset_split.json         ← train/val/test split (seed 42, 70/15/15)
 ├── training_history.json      ← per-epoch metrics from the last full training run
 ├── finetune_history.json      ← per-epoch metrics from the last finetune run
@@ -39,16 +40,18 @@ The project consists of:
 │   ├── fft_gen.py             ← FFT generator (low / mid / high freq bands)
 │   ├── adaptive_gen.py        ← S-UNIWARD generator; canonical=True enables the
 │   │                             Daubechies-8 back-convolution cost map
+│   ├── steganogan_gen.py      ← GAN-learned embedding (frozen pretrained encoder)
+│   ├── steganogan_src/        ← vendored DAI-Lab networks (MIT)
 │   └── unified_generator.py   ← dispatcher: routes gen_type to the right generator
 ├── training/
 │   ├── config.py              ← ALL hyperparameters and constants — edit here for tuning
 │   ├── train_hybrid.py        ← main training loop (called by main.py)
 │   ├── evolution.py           ← EA: genome population, mutation, fitness, niches
 │   ├── genome.py              ← genome dataclass and seeding logic
-│   ├── batch.py               ← batch construction with diversity layers (7 layers)
+│   ├── batch.py               ← batch construction with diversity layers (8 layers)
 │   ├── validate.py            ← per-epoch validation loop
 │   ├── evaluate.py            ← post-run evaluation; per-generator AUC breakdown
-│   ├── finetune.py            ← head-only fine-tuning on a frozen backbone
+│   ├── finetune.py            ← focused fine-tuning (--adaptive-focus / --steganogan-focus)
 │   ├── dataset.py             ← dataset loading and train/val/test splitting
 │   ├── utils.py               ← shared training utilities
 │   └── evaluation_results/    ← JSON metrics written by evaluate.py
@@ -98,7 +101,11 @@ All hyperparameters live in `training/config.py`. Edit only that file for tuning
 
 **Adaptive curriculum:** Adaptive capacity is NOT evolved by the EA — it is set at embed time by `ADAPTIVE_CURRICULUM_SCHEDULE`. The EA only evolves the S-UNIWARD cost-model shape (sigma_offset, cost_exponent).
 
-**Canonical S-UNIWARD:** `adaptive_gen.py` supports `canonical=True`, which activates the Daubechies-8 back-convolution cost map that matches the reference implementation. Default is `canonical=False` (simplified path). Wiring `canonical=True` into the training pipeline is required before the model can learn to detect canonical S-UNIWARD images.
+**Canonical S-UNIWARD:** `adaptive_gen.py` supports `canonical=True`, which activates the Daubechies-8 back-convolution cost map matching the reference implementation. The generator's own default is `canonical=False` (simplified path), but **the training pipeline already passes `canonical=True` everywhere** — `evolution.py` (both adaptive genome constructors), `validate.py`, `finetune.py` and `evaluate.py`. `train_hybrid.py` prints this at startup. Do not treat canonical wiring as outstanding work.
+
+**SteganoGAN:** frozen pretrained encoder with no evolvable parameters, so it is kept out of `ALL_GEN_TYPES` / `GEN_TYPE_WEIGHTS` / `ALL_NICHES` and injected via a batch floor (`STEGANOGAN_BATCH_FRACTION`) plus a fixed validation share. Same pattern as the adaptive floor.
+
+**Judging a checkpoint:** validation accuracy is unreliable when the batch is weighted toward hard cases, and `evaluate.py` generates its stego from our own generators (in-distribution). Judge by `test_kaggle.py`, which uses third-party reference files. When comparing a stego set against covers, use the *matched* cover folder — the set the stego images were derived from — not an unrelated cover dataset.
 
 ---
 
@@ -181,7 +188,7 @@ npm run dev
 
 ### Benchmark:
 ```bash
-python test_kaggle.py --checkpoint srnet_finetuned_best.pth --images 200
+python test_kaggle.py --checkpoint srnet_steganogan_best.pth --images 200
 ```
 
 ---
@@ -191,6 +198,7 @@ python test_kaggle.py --checkpoint srnet_finetuned_best.pth --images 200
 Unless explicitly instructed otherwise by the user, do not modify the following files:
 
 - `models/srnet.py` — frozen architecture
-- `srnet_finetuned_best.pth` — current best after finetune weights
+- `srnet_steganogan_best.pth` — current best / deployed weights
+- `srnet_finetuned_best.pth` — previous deployed weights
 - `srnet_best_val.pth` — current best after training weights
 - any `.pth` file — all checkpoint files are training artifacts
