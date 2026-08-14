@@ -13,6 +13,7 @@ from training.config import (
     FIXED_BATCH_SIZE,
     LOW_CAPACITY_BATCH_FRACTION,
     NICHE_BATCH_CAP,
+    STEGANOGAN_BATCH_FRACTION,
 )
 from training.genome import get_niche
 
@@ -40,6 +41,10 @@ def build_assigned_pairs(batch_files: list, evo_manager) -> tuple[list, int]:
     Layer 7 — Adaptive floor (ADAPTIVE_BATCH_FRACTION):
         Guarantees S-UNIWARD stego appears in every batch.
 
+    Layer 8 — SteganoGAN floor (STEGANOGAN_BATCH_FRACTION):
+        Guarantees GAN-learned stego appears in every batch. Injected directly
+        (not via the EA population) since SteganoGAN has no evolvable parameters.
+
     Returns:
         (pairs, fallback_count)
     """
@@ -49,10 +54,12 @@ def build_assigned_pairs(batch_files: list, evo_manager) -> tuple[list, int]:
     n_fft_lowstrength = max(1, int(n * getattr(config, 'FFT_LOW_LOWSTRENGTH_FRACTION',  0.0)))
     n_dct_lowmid      = max(1, int(n * getattr(config, 'DCT_LOWMID_LOWSTRENGTH_FRACTION', 0.0)))
     n_adaptive        = max(1, int(n * ADAPTIVE_BATCH_FRACTION))
+    n_steganogan      = max(1, int(n * STEGANOGAN_BATCH_FRACTION))
     # Clamp so micro-batches (n < ~8) degrade gracefully — the floors above each
     # reserve >= 1 slot, which can otherwise underflow n_free / n_normal below 0
     # and produce nonsense slices. At BATCH_SIZE=64 these clamps never bind.
-    n_free            = max(0, n - n_fft_lowstrength - n_dct_lowmid - n_adaptive)
+    n_free            = max(0, n - n_fft_lowstrength - n_dct_lowmid
+                           - n_adaptive - n_steganogan)
     n_lowcap          = (max(1, int(n_free * LOW_CAPACITY_BATCH_FRACTION))
                          if n_free > 0 else 0)
     n_normal          = max(0, n_free - n_lowcap)
@@ -64,6 +71,7 @@ def build_assigned_pairs(batch_files: list, evo_manager) -> tuple[list, int]:
     fft_low_paths    = shuffled[cursor : cursor + n_fft_lowstrength]; cursor += n_fft_lowstrength
     dct_lowmid_paths = shuffled[cursor : cursor + n_dct_lowmid];      cursor += n_dct_lowmid
     adaptive_paths   = shuffled[cursor : cursor + n_adaptive];        cursor += n_adaptive
+    steganogan_paths = shuffled[cursor : cursor + n_steganogan];      cursor += n_steganogan
     lowcap_paths     = shuffled[cursor : cursor + n_lowcap];          cursor += n_lowcap
     normal_paths     = shuffled[cursor:]
 
@@ -81,6 +89,10 @@ def build_assigned_pairs(batch_files: list, evo_manager) -> tuple[list, int]:
     # Layer 7 — Adaptive floor (S-UNIWARD)
     for path in adaptive_paths:
         pairs.append((path, evo_manager.get_adaptive_genome('suniward')))
+
+    # Layer 8 — SteganoGAN floor (GAN-learned embedding)
+    for path in steganogan_paths:
+        pairs.append((path, evo_manager.get_steganogan_genome()))
 
     # Layer 2 — low-capacity
     for path in lowcap_paths:

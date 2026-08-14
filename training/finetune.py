@@ -142,6 +142,10 @@ _STRATEGY_CONFIGS = [
     ('adaptive_suniward', {'gen_type': 'adaptive', 'adaptive_mode': 'suniward',
                            'sigma_offset': 0.5, 'capacity_ratio': 0.30,
                            'cost_exponent': 1.2, 'use_diagonal': True, 'canonical': True}),
+
+    # ── SteganoGAN — GAN-learned embedding (fixed pretrained encoder) ─────────
+    # No capacity/strength knob; payload depth is baked into the weights.
+    ('steganogan', {'gen_type': 'steganogan', 'capacity_ratio': 0.50}),
 ]
 
 
@@ -196,6 +200,43 @@ def _build_adaptive_sampler():
     weights = [w / total for w in weights]
 
     print("[SAMPLER/ADAPTIVE-FOCUS] Strategy weights:")
+    for n, w in zip(names, weights):
+        bar = '█' * int(w * 40)
+        print(f"  {n:<20} {w:.3f}  {bar}")
+
+    return names, configs, weights
+
+
+def _build_steganogan_sampler():
+    """
+    SteganoGAN-focus variant: ~half of each batch goes to SteganoGAN (the newly
+    added, as-yet-unlearned method), while every existing strategy is REHEARSED
+    so prior progress is retained ("don't lose progress").
+
+    SteganoGAN notional AUC = 0.50  →  weight 0.50 (model knows nothing yet).
+    The two previously-hardest methods (adaptive, fft_low) keep a meaningful
+    share; all remaining strategies get a 0.05 floor — a healthy rehearsal
+    anchor (~4.5% of each batch) so prior progress is not lost. This lands
+    SteganoGAN at ~45%: still dominant, but every method stays well-represented.
+    """
+    _auc_overrides = {
+        'steganogan':        0.50,  # → w = 0.50  (the focus target)
+        'adaptive_suniward': 0.85,  # → w = 0.15  (keep the hardest spatial method alive)
+        'fft_low':           0.90,  # → w = 0.10  (hardest frequency weak spot)
+    }
+
+    names, configs, weights = [], [], []
+    for name, config in _STRATEGY_CONFIGS:
+        auc = _auc_overrides.get(name, 0.95)  # 0.95 → floor 0.05
+        w = max(0.05, 1.0 - auc)
+        names.append(name)
+        configs.append(config)
+        weights.append(w)
+
+    total = sum(weights)
+    weights = [w / total for w in weights]
+
+    print("[SAMPLER/STEGANOGAN-FOCUS] Strategy weights:")
     for n, w in zip(names, weights):
         bar = '█' * int(w * 40)
         print(f"  {n:<20} {w:.3f}  {bar}")
@@ -268,16 +309,19 @@ def _generate_pair(args):
         cfg_used = config.copy()
         base_cap = config.get('capacity_ratio', 0.5)
         gt = config.get('gen_type')
-        if gt == 'lsb':
-            lo_cap, hi_cap = cfg.LSB_CAPACITY_RANGE
-        elif gt == 'dct':
-            lo_cap, hi_cap = cfg.DCT_CAPACITY_RANGE
-        elif gt == 'fft':
-            lo_cap, hi_cap = cfg.FFT_CAPACITY_RANGE
-        else:  # adaptive
-            lo_cap, hi_cap = cfg.ADAPTIVE_MIN_CAPACITY, cfg.MAX_CAPACITY
-        cfg_used['capacity_ratio'] = float(np.clip(
-            base_cap + random.uniform(-0.10, 0.10), lo_cap, hi_cap))
+        # SteganoGAN's payload depth is fixed by its weights — capacity_ratio is
+        # ignored by the generator, so skip the jitter entirely for it.
+        if gt != 'steganogan':
+            if gt == 'lsb':
+                lo_cap, hi_cap = cfg.LSB_CAPACITY_RANGE
+            elif gt == 'dct':
+                lo_cap, hi_cap = cfg.DCT_CAPACITY_RANGE
+            elif gt == 'fft':
+                lo_cap, hi_cap = cfg.FFT_CAPACITY_RANGE
+            else:  # adaptive
+                lo_cap, hi_cap = cfg.ADAPTIVE_MIN_CAPACITY, cfg.MAX_CAPACITY
+            cfg_used['capacity_ratio'] = float(np.clip(
+                base_cap + random.uniform(-0.10, 0.10), lo_cap, hi_cap))
 
         stego_arr, _ = unified_gen.generate_stego(cover_crop, None, cfg_used)
         if stego_arr is None:
@@ -298,9 +342,20 @@ def _generate_pair(args):
 
 # ── Main fine-tuning loop ─────────────────────────────────────────────────────
 
-def run_finetune(checkpoint_path: str, epochs: int, adaptive_focus: bool = False):
+def run_finetune(checkpoint_path: str, epochs: int, adaptive_focus: bool = False,
+                 steganogan_focus: bool = False):
     # ── Mode-dependent settings ────────────────────────────────────────────────
-    if adaptive_focus:
+    if steganogan_focus:
+        # Head-first (frozen backbone) then a gentle full-model phase — the most
+        # forgetting-resistant recipe — while the sampler rehearses every prior
+        # method. Saves to a NEW checkpoint so the frontend weights are preserved.
+        freeze_epochs = FREEZE_BACKBONE_EPOCHS
+        phase2_max_lr = FT_MAX_LR_FULL
+        save_name = 'srnet_steganogan_best.pth'
+        history_name = 'finetune_steganogan_history.json'
+        sampler_fn = _build_steganogan_sampler
+        mode_label = "STEGANOGAN-FOCUS"
+    elif adaptive_focus:
         freeze_epochs = 0  # train everything from epoch 0
         phase2_max_lr = 5e-6  # slightly higher ceiling for fast adaptation
         save_name = 'srnet_adaptive_best.pth'
@@ -521,11 +576,25 @@ def _parse_args():
                         'with no backbone freeze. '
                         f'Recommended: --epochs {ADAPTIVE_FOCUS_EPOCHS}. '
                         'Saves to srnet_adaptive_best.pth.')
+    p.add_argument('--steganogan-focus', action='store_true',
+                   help='Dedicate ~50%% of each batch to SteganoGAN while '
+                        'rehearsing every existing method (anti-forgetting). '
+                        'Defaults to resuming from srnet_finetuned_best.pth and '
+                        'saves to srnet_steganogan_best.pth (frontend weights '
+                        'are preserved).')
     return p.parse_args()
 
 
 if __name__ == '__main__':
     args = _parse_args()
     epochs = args.epochs or (ADAPTIVE_FOCUS_EPOCHS if args.adaptive_focus else FT_EPOCHS)
-    run_finetune(checkpoint_path=args.checkpoint, epochs=epochs,
-                 adaptive_focus=args.adaptive_focus)
+
+    # In steganogan-focus, default to building on the frontend's deployed weights
+    # unless the user explicitly overrode --checkpoint.
+    checkpoint = args.checkpoint
+    if args.steganogan_focus and checkpoint == DEFAULT_CHECKPOINT:
+        checkpoint = 'srnet_finetuned_best.pth'
+
+    run_finetune(checkpoint_path=checkpoint, epochs=epochs,
+                 adaptive_focus=args.adaptive_focus,
+                 steganogan_focus=args.steganogan_focus)
