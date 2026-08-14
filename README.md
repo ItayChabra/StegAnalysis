@@ -138,6 +138,7 @@ python class_demo.py --image path/to/image.png
 │
 └── scripts/
     ├── convert_steganogan_weights.py   # .steg pickle → plain state_dict
+    ├── verify_readme_numbers.py        # matched-cover detection rates (SGAN + adaptive)
     └── inspect_payload.py
 ```
 
@@ -149,13 +150,17 @@ Five embedding families are implemented. `capacity_ratio` is **true
 bits-per-pixel (bpp)** across all of them — each generator converts bpp into its
 own internal quantity.
 
-| Method | Domain | Physical ceiling | Recoverable | Evolved by EA |
+| Method | Domain | Physical ceiling (256×256) | Recoverable | Evolved by EA |
 |---|---|---|---|---|
-| **LSB** | Spatial least-significant bits | ≤ 1.0 bpp | ✅ | ✅ |
-| **DCT** | 8×8 block frequency coefficients | ≈ 0.31 bpp | ✅ | ✅ |
-| **FFT** | Global frequency rings | ≈ 0.28 bpp (high) / 0.017 (low) | ✅ | ✅ |
-| **S-UNIWARD** | Adaptive spatial (cost-model driven) | curriculum-set | ❌ | shape only |
+| **LSB** | Spatial least-significant bits | 1.0 bpp at `bit_depth=1` | ✅ | ✅ |
+| **DCT** | 8×8 block frequency coefficients | ~0.31 mid · ~0.19 low_mid · ~0.16 random | ✅ | ✅ |
+| **FFT** | Global frequency rings | ~0.28 high · ~0.14 mid · ~0.017 low (hard cap) | ✅ | ✅ |
+| **S-UNIWARD** | Adaptive spatial (cost-model driven) | curriculum-set, floor 0.20 bpp | ❌ | shape only |
 | **SteganoGAN** | Learned convolutional encoder | fixed by weights | ❌ | ❌ |
+
+Generators cap silently at their ceiling — FFT-low in particular ignores the
+requested capacity entirely and always embeds at ~0.017 bpp, so its capacity
+genes are nominal.
 
 **Recoverable vs. adversarial.** LSB/DCT/FFT expose `embed_payload` /
 `extract_payload` with deterministic positions, so a real message round-trips.
@@ -180,8 +185,19 @@ the output matches every other generator's 2-D uint8 contract.
 
 ## The detector
 
-**SRNet** is a triple-branch convolutional network operating on single-channel
-256×256 luminance patches.
+**SRNet** is a triple-branch residual network. Each 256×256 patch is fed in as a
+**2-channel tensor** — channel 0 is the spatial luminance, channel 1 is its
+log-FFT magnitude — and the three parallel front-end branches read those channels
+separately before merging:
+
+| Branch | Filters | Input | Role |
+|---|---|---|---|
+| A | 11 × 3×3, **frozen** SRM | spatial | fixed high-pass residual kernels |
+| B | 53 × 3×3, learnable | spatial | learned spatial residuals |
+| C | 21 × 3×3, learnable (abs) | log-FFT | frequency-domain artifacts |
+
+The three outputs concatenate into an 85-channel map, pass through ten residual
+stages, then global average pooling and a 2-way classifier.
 
 > **Important:** SRNet is trained on **luminance only**. Feeding raw R/G/B planes
 > is out-of-distribution — the model reads demosaicing artifacts as signal. All
@@ -213,13 +229,15 @@ only that file for tuning runs.
 
 `training/batch.py` guarantees coverage rather than trusting random sampling:
 
-| Layer | Purpose |
-|---|---|
-| 1 | Niche cap — no single generator niche dominates a batch |
-| 2 | Low-capacity floor — hard, near-invisible payloads always present |
-| 3–6 | Per-method weak-spot floors (e.g. `fft_low` low-strength, `dct_lowmid`) |
-| 7 | **Adaptive floor** — S-UNIWARD in every batch (`ADAPTIVE_BATCH_FRACTION = 0.25`) |
-| 8 | **SteganoGAN floor** — GAN stego in every batch (`STEGANOGAN_BATCH_FRACTION = 0.12`) |
+| Layer | Constraint | Default |
+|---|---|---|
+| 2 | Low-capacity floor — hard, near-invisible payloads below 0.12 bpp | 15% of free slots |
+| 3 | Per-niche cap — no single niche dominates a batch | 40% of free slots |
+| 4 | FFT combined cap — all FFT sub-niches together | 25% of free slots |
+| 5 | `fft_low` low-strength floor (strength ≤ 7.5) | 0%, set to 10% in finetune |
+| 6 | `dct_low_mid` low-strength floor (strength ≤ 3.5) | 0%, set to 10% in finetune |
+| 7 | **Adaptive floor** — S-UNIWARD in every batch | 25% |
+| 8 | **SteganoGAN floor** — GAN stego in every batch | 12% |
 
 Layers 7 and 8 inject directly rather than through the EA population: adaptive
 evolves only its cost-model *shape* (its payload is set by
@@ -255,20 +273,37 @@ fine-tune from catastrophically forgetting LSB/DCT/FFT.
 
 ## Results
 
-Benchmark: `test_kaggle.py`, 200 images per folder, sliding window 256×256 /
-stride 64, checkpoint **`srnet_steganogan_best.pth`**, aggregation **`max` @ 0.80**.
+All figures below are for **`srnet_steganogan_best.pth`**, sliding window
+256×256 / stride 64, aggregation mode **`max`**. Every number is a **detection
+rate (%)** — the fraction of images scoring at or above the threshold — so the
+columns are directly comparable.
 
-| Target | Detection rate |
-|---|---|
-| Covers (TNR — BOSS&BOWS2, Flickr30k, BOSSbase-256) | **96.4%** |
-| LSB | **100.0%** |
-| DCT | **97.5%** |
-| FFT | **97.5%** |
-| SteganoGAN (dense / basic / residual, median score) | **0.95–0.96** |
-| S-UNIWARD @ 0.2 / 0.4 bpp | **3.2%** ⚠️ |
-| **Balanced accuracy** (basic-driven, excludes adaptive) | **97.4%** |
+### Headline — `max` @ 0.80
 
-Threshold sweep (`max` mode) — the accuracy/false-positive trade-off:
+| Target | Detection rate | Source |
+|---|---|---|
+| Covers (TNR — BOSS&BOWS2, Flickr30k, BOSSbase-256, SGAN) | **96.4%** | `test_kaggle.py`, n=200 |
+| LSB | **100.0%** | `test_kaggle.py`, n=200 |
+| DCT | **97.5%** | `test_kaggle.py`, n=200 |
+| FFT | **97.5%** | `test_kaggle.py`, n=200 |
+| SteganoGAN — dense | **97.5%** | `verify_readme_numbers.py`, n=200 |
+| SteganoGAN — basic | **93.5%** | `verify_readme_numbers.py`, n=200 |
+| SteganoGAN — residual | **88.0%** | `verify_readme_numbers.py`, n=200 |
+| S-UNIWARD @ 0.4 bpp | **18.6%** ⚠️ | `verify_readme_numbers.py`, n=2000 |
+| S-UNIWARD @ 0.2 bpp | **6.7%** ⚠️ | `verify_readme_numbers.py`, n=2000 |
+| **Balanced accuracy** (basic-driven, excludes adaptive and GAN) | **97.4%** | `test_kaggle.py`, n=200 |
+
+`test_kaggle.py` puts SteganoGAN in an informational `gan` group that is excluded
+from the threshold sweep, so it reports GAN score *distributions* but no
+detection rate. `scripts/verify_readme_numbers.py` re-scores those folders (and
+adaptive, at a 10× larger sample) to produce the percentages above.
+
+Two caveats on the pooled TNR: it mixes four cover sets whose difficulty differs
+(measured separately at 0.80: `BOSSbase_256` 97.7%, `SGAN cover` 91.5%), and it
+includes `BOSSbase_256` at n=200, which is the prefix-sensitive folder described
+below. Read it as an aggregate, not as a per-dataset guarantee.
+
+### Threshold sweep — the false-positive trade-off
 
 | Threshold | TNR | TPR basic | LSB | DCT | FFT | bal-acc |
 |---|---|---|---|---|---|---|
@@ -279,43 +314,95 @@ Threshold sweep (`max` mode) — the accuracy/false-positive trade-off:
 
 ### Known limitation: low-payload S-UNIWARD
 
-**Adaptive detection is the open problem, and this README does not claim
-otherwise.** At the tested payloads, S-UNIWARD stego scores sit *below* the cover
-distribution (median 0.121 @ 0.2 bpp and 0.181 @ 0.4 bpp, vs. 0.237 for covers) —
-an inverted signal with no separating threshold. Detection never exceeds ~25% at
-any usable operating point, in this checkpoint or its predecessor.
+Adaptive is the weak method, but it is **weak, not inverted** — measured against
+its **matched cover** (`BOSSbase_256`, the exact source the SUNI files were
+derived from), the signal is correctly ordered and monotonic in payload:
 
-This is the known research frontier for content-adaptive embedding at low
-payload, not a tuning bug. Closing it requires wiring `canonical=True` S-UNIWARD
-into the *training* path and retraining — not another weighted fine-tune. See
-[`kaggle_bench_conclusion.md`](kaggle_bench_conclusion.md) for the full
-before/after analysis.
+| Set (n=2000) | Median score | Δ vs matched cover |
+|---|---|---|
+| `BOSSbase_256` (matched cover) | 0.194 | — |
+| S-UNIWARD @ 0.2 bpp | 0.237 | **+0.043** |
+| S-UNIWARD @ 0.4 bpp | 0.410 | **+0.216** |
+
+The separation is real but small, so detection depends heavily on where the
+threshold sits — and the deployed 0.80 threshold is tuned for cover TNR across
+*all* datasets, far above where adaptive separates:
+
+| Threshold | TNR (matched cover) | S-UNIWARD 0.2 | S-UNIWARD 0.4 |
+|---|---|---|---|
+| 0.30 | 66.6% | 42.3% | **59.2%** |
+| 0.50 | 82.9% | 26.3% | 44.0% |
+| 0.65 | 91.0% | 17.0% | 33.5% |
+| 0.80 | 97.7% | 6.7% | 18.6% |
+
+So adaptive detection ranges from **~59% at a permissive threshold to ~19% at the
+deployed one** for 0.4 bpp — the cost of that sensitivity is cover TNR collapsing
+from 97.7% to 66.6%. There is no single threshold that serves both adaptive and
+the low-false-positive requirement, which is exactly why the demo operating point
+sacrifices adaptive.
+
+> **Two measurement traps this project hit, recorded so they aren't repeated.**
+> **(1) Wrong baseline.** Comparing S-UNIWARD against `BOSS & BOWS2` (a
+> *different* cover dataset, median 0.237) instead of its matched `BOSSbase_256`
+> cover makes the signal look inverted. It is not — that comparison is invalid.
+> **(2) Prefix sampling.** `test_kaggle.py` takes `sorted(glob)[:n]`, and the
+> first 200 of the 10,000 BOSSbase-derived files score systematically lower than
+> the folder as a whole (cover median 0.105 at n=200 vs 0.194 at n=2000). Small
+> `--images` values distort every BOSSbase-derived number, adaptive included; the
+> Flickr30k / BOSS&BOWS2 / LSB / DCT / FFT folders are stable to ±0.008.
+
+Closing the adaptive gap is the known research frontier for content-adaptive
+embedding at low payload, not a tuning bug. It requires wiring `canonical=True`
+S-UNIWARD into the *training* path and retraining — not another weighted
+fine-tune. See [`kaggle_bench_conclusion.md`](kaggle_bench_conclusion.md) for the
+SteganoGAN fine-tune before/after — noting that its "inverted signal" section
+uses the wrong cover baseline and is superseded by the matched-cover table above.
 
 The headline 97.4% balanced accuracy is **basic-driven** — it covers
-LSB/DCT/FFT/covers and excludes adaptive by construction.
+LSB/DCT/FFT/covers and excludes both adaptive and SteganoGAN by construction.
 
 ---
 
 ## Benchmarking
 
 ```bash
+# Full sweep: 4 aggregation modes x 11 thresholds x every target folder
 python test_kaggle.py --checkpoint srnet_steganogan_best.pth --images 200
+
+# Matched-cover detection rates for SteganoGAN + a large adaptive sample
+python scripts/verify_readme_numbers.py --checkpoint srnet_steganogan_best.pth
 ```
 
-Sweeps four aggregation modes × eleven thresholds across every configured target
-folder (covers, LSB, DCT, FFT, S-UNIWARD @ 0.2/0.4 bpp, and three SteganoGAN
-encoder variants in two datasets), then prints the best operating point per mode.
+`test_kaggle.py` covers covers/LSB/DCT/FFT/S-UNIWARD plus three SteganoGAN
+encoder variants in two datasets, and prints the best operating point per mode.
+`scripts/verify_readme_numbers.py` fills its two gaps: SteganoGAN detection rates
+(the `gan` group is excluded from the sweep) and adaptive at a sample large
+enough not to be distorted by prefix selection.
 
-> Validation accuracy during fine-tuning is **misleading** when the batch is
-> biased toward hard cases, and `training/evaluate.py` generates its stego
-> on-the-fly from our own generators (in-distribution). `test_kaggle.py` runs
-> against genuine third-party reference files and is the honest metric — always
-> judge a checkpoint by it.
+Three things worth knowing before trusting a number:
+
+> **Validation accuracy is misleading** during fine-tuning when the batch is
+> biased toward hard cases. `training/evaluate.py` also generates its stego
+> on-the-fly from our own generators, so it measures in-distribution performance.
+> `test_kaggle.py` runs against genuine third-party reference files — judge a
+> checkpoint by it, not by val_acc.
+
+> **`--images` is a prefix, not a sample.** Folders are read as
+> `sorted(glob)[:n]`, so a low `--images` scores the alphabetically first files.
+> For the 10,000-file BOSSbase-derived folders that prefix is not representative;
+> use a few thousand when adaptive numbers matter.
+
+> **Compare stego against its matched cover.** Each stego folder has a cover
+> folder it was derived from. Scoring it against an unrelated cover set produces
+> meaningless deltas — including apparent sign inversions.
 
 Benchmark artifacts in the repo:
 
-- `kaggle_bench_conclusion.md` — before/after analysis of the SteganoGAN fine-tune
+- `kaggle_bench_conclusion.md` — SteganoGAN fine-tune before/after (⚠️ its
+  adaptive "inverted signal" section uses the wrong cover baseline; see Results)
 - `kaggle_bench_finetuned_best.log` / `kaggle_bench_steganogan_best.log` — raw sweeps
+- `mega_test_epoch15.log` / `mega_test_best_epoch16.log` — 1500-image runs of the
+  pre-SteganoGAN checkpoint
 - `steganogan_finetune.log`, `finetune_steganogan_history.json` — training traces
 
 ---
@@ -354,13 +441,21 @@ Non-default `strength`/`step` must be supplied — the embed response's
 `extract_hint` carries them. Returns `{message, method, cipher, bytes}`, or a
 typed error: `404 no_payload`, `422 bad_key`.
 
+### `POST /api/decrypt`
+Second step of the two-stage reveal — decrypts an already-extracted payload
+package with a passphrase, so extraction and decryption can fail independently.
+
 ### `POST /api/capacity`
 Given `file` + `method` (+ params), returns `max_message_bytes` for that image.
+
+### `GET /health`
+Liveness probe.
 
 ### Image endpoints (per `job_id`, all return PNG)
 `/api/original`, `/api/stego`, `/api/heatmap`, `/api/noisemap` (SRM residual),
 `/api/spectrum` (log-FFT + band rings), `/api/diff` (cover↔stego pixel diff),
-`/api/bitplane/{n}` (bit plane 0–7). Several accept `?source=stego|cover`.
+`/api/bitplane/{n}` (bit plane 0–7), `/api/sanitize` (payload-stripped image).
+Several accept `?source=stego|cover`.
 
 ### Payload codec
 
@@ -381,7 +476,8 @@ Conventions:
 
 - All `fetch()` calls live in `src/api/client.js`; components consume them via
   per-flow state-machine hooks (`useAnalysis`, `useBatchAnalysis`, `useEmbed`,
-  `useExtract`) driven by a status enum.
+  `useExtract`, `useCapacity`, `useHistory`) driven by a status enum. Shared
+  session state — the history drawer — lives in `context/AppContext.jsx`.
 - **CSS Modules only** — no Tailwind, MUI, shadcn or any component library.
   Everything is built from scratch on native CSS custom properties.
 - Complex interactions (e.g. the before/after comparison slider) are hand-built
