@@ -1,7 +1,8 @@
-from generators.lsb_gen      import LSBGenerator
-from generators.dct_gen      import DCTGenerator
-from generators.fft_gen      import FFTGenerator
-from generators.adaptive_gen import AdaptiveGenerator
+from generators.lsb_gen        import LSBGenerator
+from generators.dct_gen        import DCTGenerator
+from generators.fft_gen        import FFTGenerator
+from generators.adaptive_gen   import AdaptiveGenerator
+from generators.steganogan_gen import SteganoGANGenerator
 
 
 class UnifiedGenerator:
@@ -9,10 +10,11 @@ class UnifiedGenerator:
     Central hub for all steganography generators.
 
     Supported gen_type values:
-        'lsb'      — Spatial LSB embedding      (LSBGenerator)
-        'dct'      — Block DCT embedding         (DCTGenerator)
-        'fft'      — Global FFT embedding        (FFTGenerator)
-        'adaptive' — S-UNIWARD adaptive embedding (AdaptiveGenerator)
+        'lsb'        — Spatial LSB embedding        (LSBGenerator)
+        'dct'        — Block DCT embedding          (DCTGenerator)
+        'fft'        — Global FFT embedding         (FFTGenerator)
+        'adaptive'   — S-UNIWARD adaptive embedding (AdaptiveGenerator)
+        'steganogan' — GAN-learned embedding        (SteganoGANGenerator)
 
     generate_stego() accepts a file path (str), PIL.Image, or np.ndarray as
     cover_input, so callers never need to write a temporary file to disk.
@@ -20,10 +22,11 @@ class UnifiedGenerator:
 
     def __init__(self):
         self.generators = {
-            'lsb':      LSBGenerator(),
-            'dct':      DCTGenerator(),
-            'fft':      FFTGenerator(),
-            'adaptive': AdaptiveGenerator(),
+            'lsb':        LSBGenerator(),
+            'dct':        DCTGenerator(),
+            'fft':        FFTGenerator(),
+            'adaptive':   AdaptiveGenerator(),
+            'steganogan': SteganoGANGenerator(),
         }
 
     def generate_stego(self, cover_input, output_path, config):
