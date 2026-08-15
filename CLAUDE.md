@@ -82,6 +82,7 @@ The project consists of:
 | DCT | Hides data in JPEG frequency coefficients | "JPEG frequency hiding" |
 | FFT | Hides data in global frequency rings | "Frequency-domain hiding" |
 | S-UNIWARD | Adaptive algorithm that hides data in noisy/textured areas | "Adaptive spatial hiding" |
+| SteganoGAN | Trained neural network (GAN) that learns where to hide data | "AI-learned hiding" |
 | PSNR | Signal quality metric; >40 dB = visually identical | "Quality score" |
 | Sliding window | Backend ML scan technique (256×256 patches) | **Do not mention in UI** |
 | P(stego) | Model's probability that a patch contains hidden data | "Suspicion score" |

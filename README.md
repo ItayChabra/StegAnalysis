@@ -239,8 +239,10 @@ FastAPI server on `http://localhost:8000`. Plain HTTP REST.
 | `GET /health` | Liveness probe |
 
 **`POST /api/embed`** accepts `file`, `method` (`lsb` / `dct` / `fft` /
-`adaptive`), `message`, `cipher` (`none` / `aes256gcm` / `chacha20poly1305` /
-`fernet`) and `passphrase`, plus optional per-method parameters.
+`adaptive` / `steganogan`), `message`, `cipher` (`none` / `aes256gcm` /
+`chacha20poly1305` / `fernet`) and `passphrase`, plus optional per-method
+parameters. `adaptive` and `steganogan` are non-recoverable — see
+[Steganography methods](#steganography-methods).
 
 **Image endpoints**, all returning PNG for a given `job_id`: `/api/original`,
 `/api/stego`, `/api/heatmap`, `/api/noisemap`, `/api/spectrum`, `/api/diff`,

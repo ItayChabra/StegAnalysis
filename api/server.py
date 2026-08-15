@@ -436,6 +436,23 @@ async def embed(
             "note": "Adaptive (S-UNIWARD) embeds statistical noise and carries no recoverable message.",
         }
 
+    # ── SteganoGAN: GAN-learned embedding, carries no recoverable message ───────
+    if method == "steganogan":
+        stego, psnr = _gen.generate_stego(cover, None, {"gen_type": "steganogan"})
+        if stego is None:
+            raise HTTPException(status_code=500, detail={"error": "Embedding failed"})
+        _save_gray(job_id, "original.png", cover)
+        _save_gray(job_id, "stego.png", stego)
+        return {
+            "job_id": job_id, "method": "steganogan", "recoverable": False,
+            "cipher": "none", "psnr": round(float(psnr), 2) if psnr else None,
+            "stego_url": f"/api/stego/{job_id}", "original_url": f"/api/original/{job_id}",
+            "diff_url": f"/api/diff/{job_id}", "spectrum_url": f"/api/spectrum/{job_id}",
+            "bitplane_scores": _bitplane_scores(stego),
+            "pixels_modified": int(np.sum(stego.astype(int) != cover.astype(int))),
+            "note": "SteganoGAN uses a trained neural network to hide data and carries no recoverable message.",
+        }
+
     # ── Recoverable methods (LSB / DCT / FFT) ──────────────────────────────────
     if method not in _RECOVERABLE:
         raise HTTPException(status_code=400,
