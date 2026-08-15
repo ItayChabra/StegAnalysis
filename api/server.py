@@ -424,8 +424,8 @@ async def embed(
         stego, psnr = _gen.generate_stego(cover, None, config)
         if stego is None:
             raise HTTPException(status_code=500, detail={"error": "Embedding failed"})
-        _save_gray(job_id, "original.png", cover)
-        _save_gray(job_id, "stego.png", stego)
+        _save_original(job_id, image)
+        _save_gray(job_id, "stego.png", stego, original_rgb=orig_rgb)
         return {
             "job_id": job_id, "method": "adaptive", "recoverable": False,
             "cipher": "none", "psnr": round(float(psnr), 2) if psnr else None,
@@ -441,8 +441,8 @@ async def embed(
         stego, psnr = _gen.generate_stego(cover, None, {"gen_type": "steganogan"})
         if stego is None:
             raise HTTPException(status_code=500, detail={"error": "Embedding failed"})
-        _save_gray(job_id, "original.png", cover)
-        _save_gray(job_id, "stego.png", stego)
+        _save_original(job_id, image)
+        _save_gray(job_id, "stego.png", stego, original_rgb=orig_rgb)
         return {
             "job_id": job_id, "method": "steganogan", "recoverable": False,
             "cipher": "none", "psnr": round(float(psnr), 2) if psnr else None,
