@@ -20,7 +20,14 @@ Pipeline conventions (matched to the other generators):
   - Operates on a single-channel (grayscale) cover — the cover is replicated to
     RGB for the encoder, then the RGB stego is folded back to luminance so the
     returned array is 2-D uint8, exactly like lsb/dct/fft/adaptive.
-  - Returns (stego_2d_uint8, psnr).
+  - Runs at the cover's own resolution, exactly like lsb/dct/fft/adaptive — the
+    encoder is fully convolutional (Conv2d/BatchNorm2d/LeakyReLU only), so no
+    fixed input size is required. Every training caller (train_hybrid.py,
+    validate.py, evaluate.py, finetune.py) already crops covers to 256x256
+    before calling any generator, so this never mattered for training; a
+    forced resize here only broke the live embed API, where the cover keeps
+    its uploaded size and the caller expects stego.shape == cover.shape.
+  - Returns (stego_2d_uint8, psnr), same shape as the input.
 
 Weights:
   - Loads a plain state_dict checkpoint (default: repo-root steganogan_dense.pth)
@@ -54,9 +61,8 @@ _DEFAULT_WEIGHTS = Path(__file__).resolve().parent.parent / 'steganogan_dense.pt
 
 
 class SteganoGANGenerator(BaseGenerator):
-    def __init__(self, weights_path=None, device=None, target_size=(256, 256)):
+    def __init__(self, weights_path=None, device=None):
         self.weights_path = Path(weights_path) if weights_path else _DEFAULT_WEIGHTS
-        self.target_size = target_size
         self._device = device
         # Lazily built on first use so importing the module (and constructing the
         # UnifiedGenerator dispatch table) never touches disk or CUDA.
@@ -90,7 +96,8 @@ class SteganoGANGenerator(BaseGenerator):
 
     # ---------------------------------------------------------------- loading
     def _load_gray(self, cover_input):
-        """Return a 2-D uint8 grayscale array at target_size (accepts path/PIL/ndarray)."""
+        """Return a 2-D uint8 grayscale array at the cover's own resolution
+        (accepts path/PIL/ndarray). No resize — see the module docstring."""
         if isinstance(cover_input, np.ndarray):
             arr = cover_input.astype(np.uint8)
             img = Image.fromarray(arr[:, :, 0] if arr.ndim == 3 else arr, mode='L')
@@ -103,8 +110,6 @@ class SteganoGANGenerator(BaseGenerator):
                 f"cover_input must be a file path (str), PIL.Image, or np.ndarray. "
                 f"Got: {type(cover_input)}"
             )
-        if img.size != self.target_size:
-            img = img.resize(self.target_size, Image.BILINEAR)
         return np.array(img, dtype=np.uint8)
 
     # -------------------------------------------------------------- interface
