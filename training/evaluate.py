@@ -151,6 +151,13 @@ STRATEGY_CONFIGS = {
         {'label': 'mid_cap',  'gen_type': 'adaptive', 'adaptive_mode': 'suniward', 'capacity_ratio': 0.40, 'sigma_offset': 1.0, 'cost_exponent': 1.0, 'use_diagonal': True, 'canonical': True},  # reference
         {'label': 'high_cap', 'gen_type': 'adaptive', 'adaptive_mode': 'suniward', 'capacity_ratio': 0.75, 'sigma_offset': 1.0, 'cost_exponent': 1.0, 'use_diagonal': True, 'canonical': True},
     ],
+
+    # ── SteganoGAN (GAN-learned embedding) ────────────────────────────────────
+    # Single fixed operating point: the pretrained dense encoder has no capacity
+    # or strength knob (payload depth is baked into the weights).
+    'steganogan': [
+        {'label': 'fixed', 'gen_type': 'steganogan', 'capacity_ratio': 0.50},
+    ],
 }
 
 # AUC quality bands for the summary table.

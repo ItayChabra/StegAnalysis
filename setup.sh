@@ -98,9 +98,6 @@ echo ""
 echo "[DATA] Creating data folder structure..."
 mkdir -p data/raw/flickr30k
 mkdir -p "data/raw/BossBase and BOWS2"
-mkdir -p data/external/clean
-mkdir -p data/external/lsb_grayscale
-mkdir -p data/external/lsb_rgb
 mkdir -p training/evaluation_results
 
 cat <<'DATAEOF'
@@ -109,11 +106,6 @@ cat <<'DATAEOF'
   Place your images here:
     data/raw/flickr30k/             ← Flickr30k JPEGs  (lossy cover images)
     data/raw/BossBase and BOWS2/    ← BOSSbase PGMs/PNGs (lossless cover images)
-
-  For StegoLSBDatasetTest.py, place external test sets here:
-    data/external/clean/            ← clean reference images
-    data/external/lsb_grayscale/    ← grayscale LSB stego images
-    data/external/lsb_rgb/          ← RGB LSB stego images
 
 DATAEOF
 
@@ -146,9 +138,5 @@ echo ""
 echo "    source .venv/bin/activate"
 echo "    python main.py                          # start training"
 echo "    python training/evaluate.py             # post-training evaluation"
-echo "    python class_demo.py --image <img.pgm>  # interactive demo"
-echo "    python StegoLSBDatasetTest.py \\         # cross-dataset test"
-echo "           --clean-dir data/external/clean \\"
-echo "           --stego-gray-dir data/external/lsb_grayscale \\"
-echo "           --stego-rgb-dir  data/external/lsb_rgb"
+echo "    python test_kaggle.py --checkpoint srnet_steganogan_best.pth --images 200"
 echo "======================================================================"

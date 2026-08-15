@@ -151,6 +151,16 @@ FFT_LOW_LOWSTRENGTH_FRACTION = 0.0
 # evo_manager.get_adaptive_genome('suniward').
 ADAPTIVE_BATCH_FRACTION = 0.25
 
+# Layer 8 — SteganoGAN floor: guarantee GAN-learned stego appears in every batch.
+# SteganoGAN's encoder is a frozen pretrained network with no evolvable
+# parameters and a fixed payload depth, so — like adaptive — it is NOT bred by
+# the EA. It enters batches only through this floor (batch.py Layer 8 via
+# evo_manager.get_steganogan_genome()) and is kept out of ALL_GEN_TYPES /
+# GEN_TYPE_WEIGHTS / ALL_NICHES so the EA breeding pools are unaffected.
+STEGANOGAN_BATCH_FRACTION = 0.12
+# Probability that a validation image is assigned SteganoGAN in _sample_val_config.
+STEGANOGAN_VAL_FRACTION = 0.10
+
 # Valid range for adaptive genome's cost_exponent field.
 # Enforced (clamped) in evolution.py mutate() and validated at call-time in
 # adaptive_gen.py embed() so out-of-range values raise immediately.

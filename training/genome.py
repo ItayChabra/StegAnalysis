@@ -43,6 +43,8 @@ def get_niche(genome: dict) -> str:
         return f"fft_{genome.get('freq_band', 'mid')}"
     if gt == 'adaptive':
         return f"adaptive_{genome.get('adaptive_mode', 'suniward')}"
+    if gt == 'steganogan':
+        return 'steganogan'
     return 'dct'
 
 

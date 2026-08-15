@@ -50,9 +50,19 @@ RAW_DIR    = '/home/linuxu/PycharmProjects/StegAnalysis/data/raw'
 
 # Per-folder configuration for the benchmark.
 # 'label' — 0 for Covers (expecting 0% detection), 1 for Stego (expecting 100%).
-# 'group' — 'cover' | 'basic' (LSB/DCT/FFT) | 'adaptive' (S-UNIWARD);
-#           used to break the threshold sweep down by difficulty class.
+# 'group' — 'cover' | 'basic' (LSB/DCT/FFT) | 'adaptive' (S-UNIWARD) |
+#           'gan' (SteganoGAN); used to break the threshold sweep down by
+#           difficulty class. 'gan' is informational only — it prints per-target
+#           score distributions but is excluded from the basic-driven bal-acc.
 NEW_SUNI_DIR = os.path.join(KAGGLE_DIR, 'New_S-UNIWARD')
+# SteganoGAN sanity set (Kaggle): basic/cover/dense/residual, 1000 paired pngs
+# each. 'dense' matches our fine-tuned DenseEncoder weights; 'cover' is the
+# matched cover baseline.
+STEGANOGAN_DIR = os.path.join(KAGGLE_DIR, 'Steganogan')
+# SteganoGAN dataset v3 (Kaggle): cover holds all 3000 originals; basic/dense/
+# residual each hold a disjoint 1000-image subset of stego pairs (3000 total).
+# 'dense' matches our fine-tuned DenseEncoder weights; 'cover' is the baseline.
+STEGANOGAN_V3_DIR = os.path.join(KAGGLE_DIR, 'steganogan-dataset-v3')
 
 TEST_TARGETS = [
     # ── COVERS (Expected: Clean / 0% Stego) ──────────────────────────────────
@@ -68,6 +78,18 @@ TEST_TARGETS = [
     {'name': 'LSB',           'path': os.path.join(KAGGLE_DIR, 'lsb'),              'label': 1, 'group': 'basic'},
     {'name': 'DCT',           'path': os.path.join(KAGGLE_DIR, 'dct'),              'label': 1, 'group': 'basic'},
     {'name': 'FFT',           'path': os.path.join(KAGGLE_DIR, 'fft'),              'label': 1, 'group': 'basic'},
+
+    # ── STEGANOGAN SANITY SET — matched cover + 3 encoder variants ────────────
+    {'name': 'SGAN cover',    'path': os.path.join(STEGANOGAN_DIR, 'cover'),        'label': 0, 'group': 'cover'},
+    {'name': 'SGAN dense',    'path': os.path.join(STEGANOGAN_DIR, 'dense'),        'label': 1, 'group': 'gan'},
+    {'name': 'SGAN basic',    'path': os.path.join(STEGANOGAN_DIR, 'basic'),        'label': 1, 'group': 'gan'},
+    {'name': 'SGAN residual', 'path': os.path.join(STEGANOGAN_DIR, 'residual'),     'label': 1, 'group': 'gan'},
+
+    # ── STEGANOGAN v3 SET — matched cover + 3 encoder variants ────────────────
+    {'name': 'SGANv3 cover',    'path': os.path.join(STEGANOGAN_V3_DIR, 'cover'),    'label': 0, 'group': 'cover'},
+    {'name': 'SGANv3 dense',    'path': os.path.join(STEGANOGAN_V3_DIR, 'dense'),    'label': 1, 'group': 'gan'},
+    {'name': 'SGANv3 basic',    'path': os.path.join(STEGANOGAN_V3_DIR, 'basic'),    'label': 1, 'group': 'gan'},
+    {'name': 'SGANv3 residual', 'path': os.path.join(STEGANOGAN_V3_DIR, 'residual'), 'label': 1, 'group': 'gan'},
 ]
 
 _LOG_FFT_SCALE = math.log1p(256 * 256)

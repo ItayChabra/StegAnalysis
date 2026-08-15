@@ -614,3 +614,17 @@ class EvolutionaryManager:
         if candidates:
             return random.choice(candidates)
         return self._new_adaptive(f"tmp_adaptive_{mode}", mode)
+
+    def get_steganogan_genome(self) -> dict:
+        """Return a SteganoGAN genome for the Layer-8 batch floor.
+
+        SteganoGAN has no evolvable parameters (frozen pretrained encoder, fixed
+        payload depth), so this is a constant config — not sampled from, nor bred
+        into, the EA population. capacity_ratio is nominal/informational only;
+        the generator ignores it (depth is baked into the weights).
+        """
+        return {
+            'name':           'steganogan_fixed',
+            'gen_type':       'steganogan',
+            'capacity_ratio': 0.50,
+        }

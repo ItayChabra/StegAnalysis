@@ -25,6 +25,7 @@ from training.config import (
     LSB_CAPACITY_RANGE,
     LSB_STRATEGIES,
     MAX_CAPACITY,
+    STEGANOGAN_VAL_FRACTION,
 )
 from training.genome import compute_log_fft
 
@@ -150,6 +151,11 @@ def _sample_val_config(rng: random.Random) -> dict:
     physical range. Adaptive spans the full [0.20, 0.75] bpp target so per-type
     accuracy reflects real detection capability, not a single operating point.
     """
+    # SteganoGAN is not in ALL_GEN_TYPES (it is not EA-bred); include it in
+    # validation at a fixed rate so per-type accuracy is reported for it too.
+    if rng.random() < STEGANOGAN_VAL_FRACTION:
+        return {'gen_type': 'steganogan', 'capacity_ratio': 0.50}
+
     gen_type = rng.choices(ALL_GEN_TYPES, weights=GEN_TYPE_WEIGHTS)[0]
 
     if gen_type == 'lsb':

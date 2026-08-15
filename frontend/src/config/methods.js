@@ -94,9 +94,18 @@ export const METHODS = {
       },
     ],
   },
+  steganogan: {
+    id: 'steganogan',
+    name: 'SteganoGAN',
+    plain: 'AI-learned hiding',
+    recoverable: false,
+    blurb: 'A trained neural network learns where to hide data so it blends '
+      + 'into the image. Embeds statistical noise only — carries no recoverable message.',
+    params: [],
+  },
 };
 
-export const METHOD_ORDER = ['lsb', 'dct', 'fft', 'adaptive'];
+export const METHOD_ORDER = ['lsb', 'dct', 'fft', 'adaptive', 'steganogan'];
 
 // Build a params object filled with defaults for a method.
 export function defaultParams(methodId) {
