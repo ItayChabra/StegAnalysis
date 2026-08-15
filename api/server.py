@@ -59,7 +59,7 @@ THRESH_SUSP   = 0.50
 # Identical to training/config.py LOG_FFT_SCALE — inlined to avoid importing
 # the full training module chain.
 LOG_FFT_SCALE = math.log1p(256 * 256)
-CHECKPOINT    = ROOT / "srnet_finetuned_best.pth"
+CHECKPOINT    = ROOT / "srnet_steganogan_best.pth"
 
 # SRM "KV" high-pass kernel — the canonical residual the detector keys off.
 _KV_KERNEL = np.array([

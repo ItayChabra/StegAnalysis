@@ -262,6 +262,21 @@ built directly from DOM events.
 
 ---
 
+## Testing
+
+```bash
+# Backend — payload codec, crypto, all 5 generators, and the live API endpoints
+pytest
+
+# Frontend — config, hooks, and components
+cd frontend && npm test
+```
+
+Backend tests run the real SRNet checkpoint and generators on CPU — no GPU or
+external dataset required; cover images are generated synthetically.
+
+---
+
 ## Model checkpoints
 
 | File | What it is |
