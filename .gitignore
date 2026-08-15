@@ -26,3 +26,8 @@ srnet_ft_epoch_*.pth
 
 # Run logs / one-off benchmark dumps — not part of the deliverable
 *.log
+
+# Orphaned local scripts/docs kept on disk but not tracked (see cleanup commit)
+class_demo.py
+kaggle_bench_conclusion.md
+smoke_test_canonical.py
