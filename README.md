@@ -65,19 +65,12 @@ uvicorn api.server:app --reload --port 8000
 cd frontend && npm install && npm run dev     # http://localhost:5173
 ```
 
-A command-line demo is also available without the web UI:
-
-```bash
-python class_demo.py --image path/to/image.png
-```
-
 ---
 
 ## Repository layout
 
 ```
 ├── main.py               # training entry point
-├── class_demo.py         # command-line detection demo
 ├── test_kaggle.py        # evaluation against third-party test sets
 │
 ├── models/srnet.py       # the detector architecture

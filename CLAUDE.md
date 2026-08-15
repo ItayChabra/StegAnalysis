@@ -25,7 +25,6 @@ The project consists of:
 ├── CLAUDE.md                  ← you are here
 ├── main.py                    ← training entry point (calls training/train_hybrid.py)
 ├── test_kaggle.py             ← sliding-window benchmark; compares aggregation modes
-├── class_demo.py              ← CLI demo (sliding-window detection on a single image)
 ├── srnet_steganogan_best.pth  ← current best / deployed weights (val_acc ≈ 88.2%)
 ├── srnet_finetuned_best.pth   ← previous weights; base of the above fine-tune
 ├── dataset_split.json         ← train/val/test split (seed 42, 70/15/15)
