@@ -1,0 +1,97 @@
+{
+  "n_single_requests": 30,
+  "n_batch_requests": 500,
+  "single_limit_seconds": 0.6,
+  "batch_limit_seconds": 0.3,
+  "single_stats": {
+    "n": 30,
+    "mean": 0.2817,
+    "median": 0.26,
+    "stdev": 0.0798,
+    "min": 0.2059,
+    "max": 0.6326,
+    "p50": 0.26,
+    "p95": 0.3865,
+    "p99": 0.5683
+  },
+  "batch_per_image_stats": {
+    "n": 500,
+    "mean": 0.2693,
+    "median": 0.2613,
+    "stdev": 0.0506,
+    "min": 0.1416,
+    "max": 0.4977,
+    "p50": 0.2613,
+    "p95": 0.3658,
+    "p99": 0.4487
+  },
+  "batch_run_stats": {
+    "1": {
+      "n": 100,
+      "mean": 0.2669,
+      "median": 0.2605,
+      "stdev": 0.0536,
+      "min": 0.1468,
+      "max": 0.4489,
+      "p50": 0.2605,
+      "p95": 0.3607,
+      "p99": 0.4468
+    },
+    "2": {
+      "n": 100,
+      "mean": 0.2726,
+      "median": 0.2696,
+      "stdev": 0.0427,
+      "min": 0.1416,
+      "max": 0.4718,
+      "p50": 0.2696,
+      "p95": 0.3247,
+      "p99": 0.3951
+    },
+    "3": {
+      "n": 100,
+      "mean": 0.2826,
+      "median": 0.2719,
+      "stdev": 0.0636,
+      "min": 0.1592,
+      "max": 0.4977,
+      "p50": 0.2719,
+      "p95": 0.4259,
+      "p99": 0.4532
+    },
+    "4": {
+      "n": 100,
+      "mean": 0.2674,
+      "median": 0.2594,
+      "stdev": 0.0468,
+      "min": 0.172,
+      "max": 0.4327,
+      "p50": 0.2594,
+      "p95": 0.3599,
+      "p99": 0.4251
+    },
+    "5": {
+      "n": 100,
+      "mean": 0.2569,
+      "median": 0.2508,
+      "stdev": 0.0388,
+      "min": 0.1944,
+      "max": 0.4568,
+      "p50": 0.2508,
+      "p95": 0.3096,
+      "p99": 0.3739
+    }
+  },
+  "single_requests_under_threshold": 29,
+  "single_requests_total": 30,
+  "single_pass_rate": 0.9667,
+  "batch_run_avg_pass": {
+    "1": true,
+    "2": true,
+    "3": true,
+    "4": true,
+    "5": true
+  },
+  "batch_runs_passing_avg_threshold": 5,
+  "batch_runs_total": 5
+}

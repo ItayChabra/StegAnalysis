@@ -32,3 +32,9 @@ srnet_ft_epoch_*.pth
 class_demo.py
 kaggle_bench_conclusion.md
 smoke_test_canonical.py
+
+# ...and the committed charts/raw data from the Chapter 10.2 NFR test suite
+# (must come after the *.png/*.csv blanket rules above to actually un-ignore)
+!scripts/qa_reports/output/
+!scripts/qa_reports/output/*.png
+!scripts/qa_reports/output/*.csv

@@ -264,16 +264,29 @@ built directly from DOM events.
 
 ## Testing
 
+Backend tests need this project's Python environment active first — `pytest`
+is a project dependency (see `requirements.txt`), not a global tool, so
+running it outside that environment (e.g. a bare `conda activate base`) fails
+with `No module named pytest`.
+
 ```bash
 # Backend — payload codec, crypto, all 5 generators, and the live API endpoints
+
+# venv setup (./setup.sh):
+source .venv/bin/activate
+pytest
+
+# conda setup:
+conda activate afeka_stego   # or whichever env has requirements.txt installed
 pytest
 
 # Frontend — config, hooks, and components
 cd frontend && npm test
 ```
 
-Backend tests run the real SRNet checkpoint and generators on CPU — no GPU or
-external dataset required; cover images are generated synthetically.
+141 backend tests, 56 frontend tests (197 total). Backend tests run the real
+SRNet checkpoint and generators on CPU — no GPU or external dataset required;
+cover images are generated synthetically.
 
 ---
 

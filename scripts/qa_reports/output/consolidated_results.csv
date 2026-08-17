@@ -1,0 +1,207 @@
+category,file,test,status
+backend,tests/test_api.py,test_health,pass
+backend,tests/test_api.py,test_analyze_returns_valid_response,pass
+backend,tests/test_api.py,test_analyze_rejects_invalid_image,pass
+backend,tests/test_api.py,test_analyze_handles_small_image,pass
+backend,tests/test_api.py,test_lsb_embed_extract_decrypt_full_round_trip,pass
+backend,tests/test_api.py,test_lsb_embed_extract_no_encryption_message_direct,pass
+backend,tests/test_api.py,test_wrong_passphrase_returns_422_bad_key,pass
+backend,tests/test_api.py,test_extract_with_no_payload_returns_404,pass
+backend,tests/test_api.py,test_extract_auto_detects_method_when_not_specified,pass
+backend,tests/test_api.py,test_fft_embed_extract_round_trip,pass
+backend,tests/test_api.py,test_dct_embed_extract_correct_or_cleanly_rejected,pass
+backend,tests/test_api.py,test_embed_message_too_large_returns_400,pass
+backend,tests/test_api.py,test_embed_unknown_method_returns_400,pass
+backend,tests/test_api.py,test_non_recoverable_embed_reports_correctly[adaptive],pass
+backend,tests/test_api.py,test_non_recoverable_embed_reports_correctly[steganogan],pass
+backend,tests/test_api.py,test_non_recoverable_embed_preserves_colour[adaptive],pass
+backend,tests/test_api.py,test_non_recoverable_embed_preserves_colour[steganogan],pass
+backend,tests/test_api.py,test_non_recoverable_embed_handles_non_256_shape,pass
+backend,tests/test_api.py,test_extract_rejects_non_recoverable_method,pass
+backend,tests/test_api.py,test_capacity_recoverable_methods[lsb],pass
+backend,tests/test_api.py,test_capacity_recoverable_methods[dct],pass
+backend,tests/test_api.py,test_capacity_recoverable_methods[fft],pass
+backend,tests/test_api.py,test_capacity_non_recoverable_methods[adaptive],pass
+backend,tests/test_api.py,test_capacity_non_recoverable_methods[steganogan],pass
+backend,tests/test_api.py,test_unknown_job_id_returns_404,pass
+backend,tests/test_api.py,test_stego_and_diff_endpoints_after_embed,pass
+backend,tests/test_codec.py,test_frame_decode_round_trip[0-0],pass
+backend,tests/test_codec.py,test_frame_decode_round_trip[0-1],pass
+backend,tests/test_codec.py,test_frame_decode_round_trip[0-2],pass
+backend,tests/test_codec.py,test_frame_decode_round_trip[1-0],pass
+backend,tests/test_codec.py,test_frame_decode_round_trip[1-1],pass
+backend,tests/test_codec.py,test_frame_decode_round_trip[1-2],pass
+backend,tests/test_codec.py,test_frame_decode_round_trip[2-0],pass
+backend,tests/test_codec.py,test_frame_decode_round_trip[2-1],pass
+backend,tests/test_codec.py,test_frame_decode_round_trip[2-2],pass
+backend,tests/test_codec.py,test_frame_decode_round_trip[3-0],pass
+backend,tests/test_codec.py,test_frame_decode_round_trip[3-1],pass
+backend,tests/test_codec.py,test_frame_decode_round_trip[3-2],pass
+backend,tests/test_codec.py,test_frame_decode_empty_ciphertext,pass
+backend,tests/test_codec.py,test_frame_salt_nonce_shorter_than_field_are_padded,pass
+backend,tests/test_codec.py,test_frame_salt_nonce_longer_than_field_are_truncated,pass
+backend,tests/test_codec.py,test_decode_rejects_missing_magic,pass
+backend,tests/test_codec.py,test_decode_rejects_short_data,pass
+backend,tests/test_codec.py,test_decode_rejects_crc_mismatch,pass
+backend,tests/test_codec.py,test_decode_rejects_unsupported_version,pass
+backend,tests/test_codec.py,test_lsb_params_round_trip[sequential-1-1],pass
+backend,tests/test_codec.py,test_lsb_params_round_trip[skip-7-2],pass
+backend,tests/test_codec.py,test_lsb_params_round_trip[skip-65535-4],pass
+backend,tests/test_codec.py,test_dct_params_round_trip[mid-3.0],pass
+backend,tests/test_codec.py,test_dct_params_round_trip[low_mid-7.5],pass
+backend,tests/test_codec.py,test_fft_params_round_trip[low-8.0],pass
+backend,tests/test_codec.py,test_fft_params_round_trip[mid-32.0],pass
+backend,tests/test_codec.py,test_fft_params_round_trip[high-64.0],pass
+backend,tests/test_codec.py,test_unknown_lsb_strategy_id_falls_back_to_sequential,pass
+backend,tests/test_codec.py,test_bytes_bits_round_trip[],pass
+backend,tests/test_codec.py,test_bytes_bits_round_trip[A],pass
+backend,tests/test_codec.py,test_bytes_bits_round_trip[hello],pass
+backend,tests/test_codec.py,"test_bytes_bits_round_trip[\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0b\x0c\r\x0e\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f !""#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~\x7f\x80\x81\x82\x83\x84\x85\x86\x87\x88\x89\x8a\x8b\x8c\x8d\x8e\x8f\x90\x91\x92\x93\x94\x95\x96\x97\x98\x99\x9a\x9b\x9c\x9d\x9e\x9f\xa0\xa1\xa2\xa3\xa4\xa5\xa6\xa7\xa8\xa9\xaa\xab\xac\xad\xae\xaf\xb0\xb1\xb2\xb3\xb4\xb5\xb6\xb7\xb8\xb9\xba\xbb\xbc\xbd\xbe\xbf\xc0\xc1\xc2\xc3\xc4\xc5\xc6\xc7\xc8\xc9\xca\xcb\xcc\xcd\xce\xcf\xd0\xd1\xd2\xd3\xd4\xd5\xd6\xd7\xd8\xd9\xda\xdb\xdc\xdd\xde\xdf\xe0\xe1\xe2\xe3\xe4\xe5\xe6\xe7\xe8\xe9\xea\xeb\xec\xed\xee\xef\xf0\xf1\xf2\xf3\xf4\xf5\xf6\xf7\xf8\xf9\xfa\xfb\xfc\xfd\xfe\xff]",pass
+backend,tests/test_codec.py,test_bytes_to_bits_is_msb_first,pass
+backend,tests/test_codec.py,test_total_bits_for,pass
+backend,tests/test_codec.py,test_header_size_is_52_bytes,pass
+backend,tests/test_crypto.py,test_encrypt_decrypt_round_trip[0],pass
+backend,tests/test_crypto.py,test_encrypt_decrypt_round_trip[1],pass
+backend,tests/test_crypto.py,test_encrypt_decrypt_round_trip[2],pass
+backend,tests/test_crypto.py,test_encrypt_decrypt_round_trip[3],pass
+backend,tests/test_crypto.py,test_round_trip_empty_plaintext[0],pass
+backend,tests/test_crypto.py,test_round_trip_empty_plaintext[1],pass
+backend,tests/test_crypto.py,test_round_trip_empty_plaintext[2],pass
+backend,tests/test_crypto.py,test_round_trip_empty_plaintext[3],pass
+backend,tests/test_crypto.py,test_round_trip_unicode_message[0],pass
+backend,tests/test_crypto.py,test_round_trip_unicode_message[1],pass
+backend,tests/test_crypto.py,test_round_trip_unicode_message[2],pass
+backend,tests/test_crypto.py,test_round_trip_unicode_message[3],pass
+backend,tests/test_crypto.py,test_wrong_passphrase_raises_decryption_error[1],pass
+backend,tests/test_crypto.py,test_wrong_passphrase_raises_decryption_error[2],pass
+backend,tests/test_crypto.py,test_wrong_passphrase_raises_decryption_error[3],pass
+backend,tests/test_crypto.py,test_tampered_ciphertext_raises_decryption_error[1],pass
+backend,tests/test_crypto.py,test_tampered_ciphertext_raises_decryption_error[2],pass
+backend,tests/test_crypto.py,test_tampered_ciphertext_raises_decryption_error[3],pass
+backend,tests/test_crypto.py,test_aead_ciphertext_differs_from_plaintext[1],pass
+backend,tests/test_crypto.py,test_aead_ciphertext_differs_from_plaintext[2],pass
+backend,tests/test_crypto.py,test_cipher_none_is_passthrough_no_encryption,pass
+backend,tests/test_crypto.py,test_empty_passphrase_rejected_on_encrypt[1],pass
+backend,tests/test_crypto.py,test_empty_passphrase_rejected_on_encrypt[2],pass
+backend,tests/test_crypto.py,test_empty_passphrase_rejected_on_encrypt[3],pass
+backend,tests/test_crypto.py,test_empty_passphrase_rejected_on_decrypt[1],pass
+backend,tests/test_crypto.py,test_empty_passphrase_rejected_on_decrypt[2],pass
+backend,tests/test_crypto.py,test_empty_passphrase_rejected_on_decrypt[3],pass
+backend,tests/test_crypto.py,test_different_salts_produce_different_ciphertext[1],pass
+backend,tests/test_crypto.py,test_different_salts_produce_different_ciphertext[2],pass
+backend,tests/test_crypto.py,test_different_salts_produce_different_ciphertext[3],pass
+backend,tests/test_crypto.py,test_cipher_id_from_name_aliases[None-0],pass
+backend,tests/test_crypto.py,test_cipher_id_from_name_aliases[-0],pass
+backend,tests/test_crypto.py,test_cipher_id_from_name_aliases[none-0],pass
+backend,tests/test_crypto.py,test_cipher_id_from_name_aliases[aes256gcm-1],pass
+backend,tests/test_crypto.py,test_cipher_id_from_name_aliases[AES-256-GCM-1],pass
+backend,tests/test_crypto.py,test_cipher_id_from_name_aliases[aes-1],pass
+backend,tests/test_crypto.py,test_cipher_id_from_name_aliases[chacha20poly1305-2],pass
+backend,tests/test_crypto.py,test_cipher_id_from_name_aliases[ChaCha20-Poly1305-2],pass
+backend,tests/test_crypto.py,test_cipher_id_from_name_aliases[fernet-3],pass
+backend,tests/test_crypto.py,test_cipher_id_from_name_passthrough_int,pass
+backend,tests/test_crypto.py,test_cipher_id_from_name_unknown_raises,pass
+backend,tests/test_crypto.py,test_cipher_names_and_ids_are_consistent_inverses,pass
+backend,tests/test_generators.py,test_embed_extract_payload_bit_exact_round_trip[lsb],pass
+backend,tests/test_generators.py,test_embed_extract_payload_bit_exact_round_trip[dct],pass
+backend,tests/test_generators.py,test_embed_extract_payload_bit_exact_round_trip[fft],pass
+backend,tests/test_generators.py,test_embed_payload_does_not_mutate_input_array[lsb],pass
+backend,tests/test_generators.py,test_embed_payload_does_not_mutate_input_array[dct],pass
+backend,tests/test_generators.py,test_embed_payload_does_not_mutate_input_array[fft],pass
+backend,tests/test_generators.py,test_full_framed_round_trip_correct_or_cleanly_detected[0-lsb],pass
+backend,tests/test_generators.py,test_full_framed_round_trip_correct_or_cleanly_detected[0-dct],pass
+backend,tests/test_generators.py,test_full_framed_round_trip_correct_or_cleanly_detected[0-fft],pass
+backend,tests/test_generators.py,test_full_framed_round_trip_correct_or_cleanly_detected[1-lsb],pass
+backend,tests/test_generators.py,test_full_framed_round_trip_correct_or_cleanly_detected[1-dct],pass
+backend,tests/test_generators.py,test_full_framed_round_trip_correct_or_cleanly_detected[1-fft],pass
+backend,tests/test_generators.py,test_dct_bit_corruption_is_caught_by_crc_not_silently_accepted,pass
+backend,tests/test_generators.py,test_wrong_passphrase_fails_after_real_embed[lsb],pass
+backend,tests/test_generators.py,test_wrong_passphrase_fails_after_real_embed[dct],pass
+backend,tests/test_generators.py,test_wrong_passphrase_fails_after_real_embed[fft],pass
+backend,tests/test_generators.py,test_payload_capacity_bits_positive[lsb],pass
+backend,tests/test_generators.py,test_payload_capacity_bits_positive[dct],pass
+backend,tests/test_generators.py,test_payload_capacity_bits_positive[fft],pass
+backend,tests/test_generators.py,test_payload_capacity_scales_with_image_size[lsb],pass
+backend,tests/test_generators.py,test_payload_capacity_scales_with_image_size[dct],pass
+backend,tests/test_generators.py,test_payload_capacity_scales_with_image_size[fft],pass
+backend,tests/test_generators.py,test_embed_payload_raises_when_message_exceeds_capacity[lsb],pass
+backend,tests/test_generators.py,test_embed_payload_raises_when_message_exceeds_capacity[dct],pass
+backend,tests/test_generators.py,test_embed_payload_raises_when_message_exceeds_capacity[fft],pass
+backend,tests/test_generators.py,test_run_produces_valid_stego[lsb],pass
+backend,tests/test_generators.py,test_run_produces_valid_stego[dct],pass
+backend,tests/test_generators.py,test_run_produces_valid_stego[fft],pass
+backend,tests/test_generators.py,test_run_produces_valid_stego[adaptive],pass
+backend,tests/test_generators.py,test_run_produces_valid_stego[steganogan],pass
+backend,tests/test_generators.py,test_run_preserves_non_square_non_256_shape[lsb],pass
+backend,tests/test_generators.py,test_run_preserves_non_square_non_256_shape[dct],pass
+backend,tests/test_generators.py,test_run_preserves_non_square_non_256_shape[fft],pass
+backend,tests/test_generators.py,test_run_preserves_non_square_non_256_shape[adaptive],pass
+backend,tests/test_generators.py,test_run_preserves_non_square_non_256_shape[steganogan],pass
+backend,tests/test_generators.py,test_non_recoverable_generators_change_the_image[adaptive],pass
+backend,tests/test_generators.py,test_non_recoverable_generators_change_the_image[steganogan],pass
+backend,tests/test_generators.py,test_unknown_gen_type_returns_none,pass
+non-functional,tests/nonfunctional/test_extensibility.py,test_dummygen_is_a_base_generator,pass
+non-functional,tests/nonfunctional/test_extensibility.py,test_unified_generator_registers_dummy_without_dispatch_changes,pass
+non-functional,tests/nonfunctional/test_extensibility.py,test_unified_generator_can_invoke_dummy,pass
+non-functional,tests/nonfunctional/test_extensibility.py,test_unified_generator_unknown_type_still_handled_generically,pass
+non-functional,tests/nonfunctional/test_security_malformed_upload.py,test_malicious_payload_disguised_as_jpg_is_rejected,pass
+non-functional,tests/nonfunctional/test_security_malformed_upload.py,test_malicious_payload_disguised_as_jpg_via_embed_endpoint_is_rejected,pass
+non-functional,tests/nonfunctional/test_security_malformed_upload.py,test_control_real_jpg_bytes_are_accepted,pass
+non-functional,tests/nonfunctional/test_performance.py,test_performance_stress,pass
+non-functional,tests/nonfunctional/test_reliability_witness_set.py,test_reliability_witness_set,fail
+frontend,src/config/methods.test.js,METHODS / METHOD_ORDER every id in METHOD_ORDER has a matching METHODS entry,pass
+frontend,src/config/methods.test.js,METHODS / METHOD_ORDER has no duplicate entries,pass
+frontend,src/config/methods.test.js,METHODS / METHOD_ORDER every method has a plain-English label distinct from its technical name,pass
+frontend,src/config/methods.test.js,METHODS / METHOD_ORDER exactly lsb/dct/fft are recoverable; adaptive/steganogan are not,pass
+frontend,src/config/methods.test.js,"METHODS / METHOD_ORDER every param has a key, label, type, and default",pass
+frontend,src/config/methods.test.js,METHODS / METHOD_ORDER every select param lists its default among its options,pass
+frontend,src/config/methods.test.js,defaultParams builds a {key: default} object for a method with params,pass
+frontend,src/config/methods.test.js,defaultParams returns an empty object for a method with no configurable params,pass
+frontend,src/config/methods.test.js,defaultParams covers every method in METHOD_ORDER without throwing,pass
+frontend,src/config/methods.test.js,formatHint formats a recoverable method + cipher hint,pass
+frontend,src/config/methods.test.js,"formatHint renders ""no encryption"" for cipher none",pass
+frontend,src/config/methods.test.js,"formatHint renders ""no encryption"" when cipher is missing entirely",pass
+frontend,src/config/methods.test.js,formatHint falls back to the raw method id for an unknown method,pass
+frontend,src/config/methods.test.js,formatHint returns an empty string for a null/undefined hint,pass
+frontend,src/hooks/useAnalysis.test.js,useAnalysis starts IDLE,pass
+frontend,src/hooks/useAnalysis.test.js,useAnalysis passes through UPLOADING -> ANALYZING -> COMPLETE on success,pass
+frontend,src/hooks/useAnalysis.test.js,"useAnalysis goes straight to ERROR on failure, without the ANALYZING beat",pass
+frontend,src/hooks/useAnalysis.test.js,useAnalysis reset() returns to IDLE,pass
+frontend,src/hooks/useCapacity.test.js,"useCapacity starts with no data, not loading",pass
+frontend,src/hooks/useCapacity.test.js,useCapacity debounces: does not call the API before the delay elapses,pass
+frontend,src/hooks/useCapacity.test.js,useCapacity sets data after the debounced call resolves,pass
+frontend,src/hooks/useCapacity.test.js,"useCapacity passing a null file clears data immediately, with no API call",pass
+frontend,src/hooks/useCapacity.test.js,"useCapacity a failed request clears data rather than leaving stale data, and stops loading",pass
+frontend,src/hooks/useCapacity.test.js,useCapacity only the latest of several rapid calls applies its result (stale responses are ignored),pass
+frontend,src/hooks/useCapacity.test.js,useCapacity clear() resets data and loading,pass
+frontend,src/hooks/useEmbed.test.js,useEmbed starts IDLE with no result/error,pass
+frontend,src/hooks/useEmbed.test.js,useEmbed goes PROCESSING -> COMPLETE and stores the result on success,pass
+frontend,src/hooks/useEmbed.test.js,useEmbed goes PROCESSING -> ERROR and re-throws on failure,pass
+frontend,src/hooks/useEmbed.test.js,useEmbed reset() returns to IDLE and clears result/error,pass
+frontend,src/hooks/useEmbed.test.js,useEmbed a fresh embed() call clears a previous error,pass
+frontend,src/hooks/useExtract.test.js,useExtract — extract step starts IDLE,pass
+frontend,src/hooks/useExtract.test.js,useExtract — extract step PROCESSING -> REVEALED on a found payload,pass
+frontend,src/hooks/useExtract.test.js,"useExtract — extract step PROCESSING -> ERROR with code ""no_payload"" when nothing is found",pass
+frontend,src/hooks/useExtract.test.js,useExtract — decrypt step throws synchronously if called before a successful extract,pass
+frontend,src/hooks/useExtract.test.js,useExtract — decrypt step REVEALED -> DECRYPTING -> DECRYPTED on the right passphrase,pass
+frontend,src/hooks/useExtract.test.js,useExtract — decrypt step a wrong passphrase drops back to REVEALED (not ERROR) so the user can retry,pass
+frontend,src/hooks/useExtract.test.js,useExtract — decrypt step defaults to an empty-string passphrase when none is given,pass
+frontend,src/hooks/useExtract.test.js,useExtract — reset clears state/result/plaintext/error back to IDLE,pass
+frontend,src/components/Embed/CapacityMeter.test.jsx,CapacityMeter shows an idle hint when there is no data and not loading,pass
+frontend,src/components/Embed/CapacityMeter.test.jsx,"CapacityMeter shows an ""estimating"" hint while loading with no data yet",pass
+frontend,src/components/Embed/CapacityMeter.test.jsx,CapacityMeter shows the non-recoverable message for adaptive/steganogan-style data,pass
+frontend,src/components/Embed/CapacityMeter.test.jsx,CapacityMeter shows used/max bytes for a recoverable method within capacity,pass
+frontend,src/components/Embed/CapacityMeter.test.jsx,CapacityMeter flags an over-capacity message with an error and no crash on the bar width,pass
+frontend,src/components/Embed/CapacityMeter.test.jsx,CapacityMeter treats a missing messageBytes as zero used,pass
+frontend,src/components/Embed/GeneratorPicker.test.jsx,"GeneratorPicker renders one radio button per method, in METHOD_ORDER",pass
+frontend,src/components/Embed/GeneratorPicker.test.jsx,GeneratorPicker marks the selected method as checked and the rest as unchecked,pass
+frontend,src/components/Embed/GeneratorPicker.test.jsx,GeneratorPicker calls onChange with the clicked method id,pass
+frontend,src/components/Embed/GeneratorPicker.test.jsx,"GeneratorPicker tags non-recoverable methods ""noise only"" and leaves recoverable ones untagged",pass
+frontend,src/components/Embed/GeneratorPicker.test.jsx,GeneratorPicker shows the technical name alongside the plain-English label,pass
+frontend,src/components/Embed/ParamControls.test.jsx,ParamControls renders a field for every param of the method,pass
+frontend,src/components/Embed/ParamControls.test.jsx,ParamControls renders nothing for a method with no configurable params,pass
+frontend,src/components/Embed/ParamControls.test.jsx,"ParamControls hides a param whose showIf condition is not met (lsb step, strategy=sequential)",pass
+frontend,src/components/Embed/ParamControls.test.jsx,"ParamControls shows the param once its showIf condition is met (lsb step, strategy=skip)",pass
+frontend,src/components/Embed/ParamControls.test.jsx,ParamControls fires onChange with the raw string value for a select field,pass
+frontend,src/components/Embed/ParamControls.test.jsx,ParamControls fires onChange with a parsed Number (not a string) for a number field,pass
+frontend,src/components/Embed/ParamControls.test.jsx,ParamControls emits an empty string (not NaN) when a number field is cleared,pass

@@ -1,0 +1,15 @@
+{
+  "device": "cuda",
+  "gpu_name": "GRID A100D-20C",
+  "cpu": "x86_64",
+  "checkpoint": "/home/linuxu/PycharmProjects/StegAnalysis/srnet_steganogan_best.pth",
+  "single_image_seconds": 0.4964,
+  "single_image_file": "4567734402.jpg",
+  "batch_size": 100,
+  "batch_total_seconds": 26.9804,
+  "batch_avg_seconds": 0.2698,
+  "single_limit": 0.6,
+  "batch_limit": 0.3,
+  "single_pass": true,
+  "batch_pass": true
+}
