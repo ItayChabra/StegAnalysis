@@ -1,34 +1,37 @@
-# StegAnalysis — AI-Powered Steganography Detection
+# StegAnalysis - AI-Powered Steganography Detection
 
-A full-stack system that detects data hidden inside images. A convolutional
-neural network (**SRNet**) is trained adversarially against an evolutionary
-algorithm that continuously breeds new steganography techniques to fool it, and
-the trained detector is served through a FastAPI backend and a React web app.
+> Final engineering project, B.Sc. Software Engineering, Afeka College of Engineering.
+> Developed with the guidance of Israel's National Cyber Directorate.
 
-```
-  cover image ──► [ generator population ]──► stego image
-                          ▲                        │
-                          │  fool rate             ▼
-                    [ evolutionary  ]◄────── [ SRNet detector ]
-                    [   algorithm   ]              │
-                                                   ▼
-                                     P(hidden data) + suspicion map
-```
+Someone can hide a message inside an ordinary-looking photo, and nothing about
+the image looks different to the eye. **StegAnalysis takes any image and
+estimates whether something is hidden inside it - and if so, where.**
+
+Unlike tools that target a specific embedding method, it does not need to be
+told which technique was used. It is built around a convolutional neural network
+(**SRNet**) trained adversarially against an evolutionary algorithm that
+continuously breeds new steganography techniques to fool it, and served through
+a FastAPI backend and a React web app.
+
+![Training pipeline and production system architecture](docs/screenshots/architecture.webp)
 
 ---
 
 ## Contents
 
 - [What it does](#what-it-does)
+- [Results](#results)
 - [Quick start](#quick-start)
 - [Repository layout](#repository-layout)
 - [Steganography methods](#steganography-methods)
 - [The detector](#the-detector)
 - [How it was trained](#how-it-was-trained)
-- [Results](#results)
 - [API reference](#api-reference)
 - [Frontend](#frontend)
+- [Testing](#testing)
 - [Model checkpoints](#model-checkpoints)
+- [Glossary](#glossary)
+- [Key code references](#key-code-references)
 - [Credits & licence](#credits--licence)
 
 ---
@@ -41,10 +44,53 @@ Three user-facing flows, all backed by the same detector:
 |---|---|---|
 | **Analyze** | Any image | A suspicion score, a heatmap showing *where* the suspicion is, a residual view of what the model reacts to, and a frequency spectrum |
 | **Embed** | An image + a message | The message encrypted and hidden inside the image, with image-quality (PSNR) and capacity figures |
-| **Extract** | A stego image + passphrase | The recovered message — the hiding method is detected automatically |
+| **Extract** | A stego image + passphrase | The recovered message - the hiding method is detected automatically |
 
 The interface is written for a non-technical audience: no machine-learning
 jargon is shown to the user.
+
+![Analyze result: suspicion grid over a flagged image](docs/screenshots/heatmap.webp)
+
+---
+
+## Results
+
+Evaluated on **third-party test images the model never saw during training**
+(public Kaggle steganography sets), using the
+deployed operating point.
+
+| Target | Detection rate |
+|---|---|
+| Clean images correctly cleared | **96.4%** |
+| LSB | **100.0%** |
+| DCT | **97.5%** |
+| FFT | **97.5%** |
+| SteganoGAN | **88.0 – 97.5%** |
+| S-UNIWARD @ 0.4 bpp  | 14.3% |
+| S-UNIWARD @ 0.2 bpp  | 1.9% |
+| **Balanced accuracy**  | **97.4%** |
+
+ Content-adaptive embedding - see the limitation below.
+ Computed over clean images and the three classical methods; **excludes the
+two S-UNIWARD rows**, which are reported separately rather than averaged away.
+
+Detection is essentially saturated on the three classical methods and strong on
+GAN-generated stego. Because the test images and the embedding tools that
+produced them were not used in training, these figures indicate generalization
+beyond our own generators.
+
+### Known limitation: content-adaptive embedding
+
+S-UNIWARD remains the main limitation of the current detector. The
+steganographic signal is present but faint: stego images do score higher than
+their matched cover images, and consistently so as the payload grows, but at low
+payloads the margin is too small to cross the deployed decision threshold, which
+is set to keep false alarms on clean images. Loosening that threshold raises
+0.4 bpp detection to roughly 47%, at the cost of dropping clean-image accuracy
+to 84%.
+
+Low-payload content-adaptive steganography is a recognized open problem in the
+steganalysis literature.
 
 ---
 
@@ -70,17 +116,18 @@ cd frontend && npm install && npm run dev     # http://localhost:5173
 ## Repository layout
 
 ```
+├── setup.sh              # environment bootstrap
 ├── main.py               # training entry point
 ├── test_kaggle.py        # evaluation against third-party test sets
 │
 ├── models/srnet.py       # the detector architecture
 │
 ├── generators/           # the five steganography methods
-│   ├── lsb_gen.py            # spatial least-significant-bit
-│   ├── dct_gen.py            # block-DCT (JPEG-style frequency)
-│   ├── fft_gen.py            # global FFT frequency bands
-│   ├── adaptive_gen.py       # S-UNIWARD content-adaptive
-│   ├── steganogan_gen.py     # GAN-learned embedding
+│   ├── lsb_gen.py
+│   ├── dct_gen.py
+│   ├── fft_gen.py
+│   ├── adaptive_gen.py       # S-UNIWARD
+│   ├── steganogan_gen.py
 │   └── unified_generator.py  # dispatcher
 │
 ├── training/
@@ -88,10 +135,18 @@ cd frontend && npm install && npm run dev     # http://localhost:5173
 │   ├── train_hybrid.py   # adversarial training loop
 │   ├── evolution.py      # the evolutionary algorithm
 │   ├── batch.py          # batch construction with diversity guarantees
-│   └── finetune.py       # focused fine-tuning
+│   ├── evaluate.py       # per-method offline evaluation
+│   └── finetune.py
 │
-├── payload/              # encrypted message codec (header + AES/ChaCha20)
+├── payload/              # encrypted message codec
 ├── api/server.py         # FastAPI application
+├── tests/                # backend pytest suite
+│   ├── test_api.py
+│   ├── test_codec.py
+│   ├── test_crypto.py
+│   ├── test_generators.py
+│   └── nonfunctional/    # performance, reliability, security, extensibility
+├── docs/screenshots/     # README images
 └── frontend/             # React + Vite web application
 ```
 
@@ -111,25 +166,21 @@ Five embedding families are implemented. Capacity is expressed as true
 | **SteganoGAN** | Wherever a trained neural encoder chooses | ❌ |
 
 The first three carry a real, recoverable message. S-UNIWARD and SteganoGAN
-embed random data — they exist to generate realistic training material for the
+embed random data - they exist to generate realistic training material for the
 detector and are presented in the UI as non-recoverable.
 
 **S-UNIWARD** follows the reference formulation (Daubechies-8 back-convolution
-cost model), with the embedding strength solved against ternary entropy so that
-the requested bpp is genuine. Calibration was verified against reference files:
+cost model), with embedding strength solved against ternary entropy so that the
+requested bpp is genuine. Calibration was verified against reference files:
 0.20 bpp changes ~3.2% of pixels at ~63 dB PSNR.
-
-**SteganoGAN** uses the pretrained DAI-Lab dense encoder, vendored into the
-repository and converted to a plain PyTorch state dict so it does not depend on
-the upstream package's older PyTorch pin.
 
 ---
 
 ## The detector
 
-**SRNet** is a triple-branch residual network. Each 256×256 patch enters as a
-two-channel tensor — the spatial image plus its frequency-domain (log-FFT)
-representation — and three parallel branches read them before merging:
+**SRNet** is a triple-branch residual network. Each 256×256 patch is represented
+using both spatial and frequency-domain (log-FFT) information, and three
+parallel branches process these representations:
 
 | Branch | Filters | Reads | Purpose |
 |---|---|---|---|
@@ -141,33 +192,43 @@ Their outputs concatenate into an 85-channel map, pass through ten residual
 stages, and end in global average pooling and a binary classifier.
 
 Whole images are scanned with a **256×256 sliding window** and the per-window
-probabilities are reduced to a single score by taking the maximum — a hidden
+probabilities are reduced to a single score by taking the maximum - a hidden
 message may occupy only part of an image, so the most suspicious region governs
 the verdict.
 
 > The detector is trained on image **luminance** only. All inference paths
-> convert to grayscale first; feeding raw colour channels is out-of-distribution
+> convert to grayscale first. feeding raw colour channels is out-of-distribution
 > and degrades accuracy badly.
+
+![Bit-plane explorer: LSB plane goes from structured to noise-like after embedding](docs/screenshots/lsb_plane.webp)
 
 ---
 
 ## How it was trained
 
-Training is a co-evolutionary loop. In each generation, a population of
-generator "genomes" — each a steganography method plus its parameters — embeds
-data into cover images; the detector trains on the result; and the genomes are
-then bred and mutated to maximise their success at fooling the *current*
-detector. The detector and its adversaries therefore improve together.
+The detector is trained together with an evolutionary population of generator
+*genomes* - each a steganography method plus its parameters. Every generation
+embeds data into cover images, trains the detector on the result, and then
+breeds and mutates the genomes to maximise their success at fooling the
+*current* detector. Detector and adversaries improve together.
 
-Two mechanisms keep this stable:
+Left unchecked, this loop degenerates: the population collapses onto whichever
+single technique currently fools the detector best, and the detector then
+forgets the techniques that have stopped appearing. Three mechanisms prevent
+this:
 
-- **Diversity guarantees.** Batches are constructed so that no single technique
-  can dominate, with reserved quotas for the hardest cases — low-payload
-  embeddings, weak-strength frequency embeddings, and a guaranteed share for
-  S-UNIWARD and SteganoGAN in every batch.
-- **A capacity penalty** in the fitness function, which prevents the algorithm
-  from "winning" trivially by driving every technique to its lowest, least
-  detectable payload.
+- **Batch ceilings** - cap how many slots any one niche or family may occupy, so
+  no single technique dominates a batch.
+- **Batch floors** - reserve a fixed share of every batch for the hardest cases
+  (S-UNIWARD, SteganoGAN, low-payload embeddings), so no family can vanish and
+  be forgotten.
+- **Capacity penalty** in the fitness function - prevents the algorithm from
+  "winning" trivially by driving every technique to its lowest, least detectable
+  payload.
+
+During fine-tuning the evolutionary search is switched off entirely and replaced
+by a sampler that weights each technique by how badly the detector currently
+handles it.
 
 ```bash
 python main.py                                   # full training run
@@ -179,69 +240,24 @@ All hyperparameters live in [`training/config.py`](training/config.py).
 
 ---
 
-## Results
-
-Evaluated on **third-party test images the model never saw during training**
-(BOSSbase, BOWS2, Flickr30k and public Kaggle steganography sets), using the
-deployed operating point.
-
-| Target | Detection rate |
-|---|---|
-| Clean images correctly cleared | **96.4%** |
-| LSB | **100.0%** |
-| DCT | **97.5%** |
-| FFT | **97.5%** |
-| SteganoGAN | **88.0 – 97.5%** |
-| S-UNIWARD @ 0.4 bpp | 14.3% |
-| S-UNIWARD @ 0.2 bpp | 1.9% |
-| **Balanced accuracy** | **97.4%** |
-
-Detection is essentially saturated on the three classical methods and strong on
-GAN-generated stego. Because the test images come from independent sources and
-third-party embedding tools, these figures demonstrate generalisation rather
-than memorisation of our own generators.
-
-### Known limitation: content-adaptive embedding
-
-S-UNIWARD is the one method the detector does not handle well, and the results
-above report that honestly. The signal is present but faint: stego images do
-score higher than their matched cover images, and consistently so as the payload
-grows, but the margin is small enough that the deployed threshold — chosen to
-keep false alarms on clean images low — sits above it. Loosening the threshold
-raises 0.4 bpp detection to roughly 47%, at the cost of dropping clean-image
-accuracy to 84%.
-
-Low-payload content-adaptive steganography is a recognised open problem in the
-steganalysis literature, not an implementation defect. The headline balanced
-accuracy above is computed over clean images and the three classical methods,
-and **excludes S-UNIWARD** — it is reported separately rather than averaged away.
-
----
-
 ## API reference
 
 FastAPI server on `http://localhost:8000`. Plain HTTP REST.
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /api/analyze` | Detection. Returns confidence, per-window scores, and URLs for the visualisations |
-| `POST /api/embed` | Hide a message. Returns the stego image, PSNR, capacity, and the settings needed to extract |
+| `POST /api/analyze` | Detection - confidence, per-window scores, and visualisation URLs |
+| `POST /api/embed` | Hide a message - returns the stego image, PSNR and capacity |
 | `POST /api/extract` | Recover a hidden message, auto-detecting the method |
 | `POST /api/decrypt` | Decrypt an already-extracted payload (two-step reveal) |
 | `POST /api/capacity` | Maximum message size for a given image and method |
 | `GET /health` | Liveness probe |
 
-**`POST /api/embed`** accepts `file`, `method` (`lsb` / `dct` / `fft` /
-`adaptive` / `steganogan`), `message`, `cipher` (`none` / `aes256gcm` /
-`chacha20poly1305` / `fernet`) and `passphrase`, plus optional per-method
-parameters. `adaptive` and `steganogan` are non-recoverable — see
-[Steganography methods](#steganography-methods).
-
-**Image endpoints**, all returning PNG for a given `job_id`: `/api/original`,
+Image endpoints, all returning PNG for a given `job_id`: `/api/original`,
 `/api/stego`, `/api/heatmap`, `/api/noisemap`, `/api/spectrum`, `/api/diff`,
 `/api/bitplane/{n}`, `/api/sanitize`.
 
-**Payload format.** `payload/codec.py` prefixes the ciphertext with a 52-byte
+**Payload format.** `payload/codec.py` prefixes the ciphertext with a
 self-describing header (magic number, method, cipher, length, salt, nonce,
 parameters and a CRC-32 checksum), so an extractor can identify and validate a
 payload without being told how it was made. Encryption is authenticated
@@ -252,41 +268,25 @@ such rather than returning garbage.
 
 ## Frontend
 
-React 18 + Vite, with routes for `/analyze`, `/embed`, `/extract` and `/learn`.
-Dark, high-contrast interface.
-
-All network calls are centralised in `src/api/client.js` and consumed through
-per-flow state-machine hooks. Styling is plain CSS Modules with no UI component
-library, and interactive elements such as the before/after comparison slider are
-built directly from DOM events.
+React 18 + Vite. Separate flows for analysis, embedding and extraction, plus a
+`/learn` page explaining the concepts, in a dark high-contrast interface. All
+network calls go through a centralised API client (`src/api/client.js`).
 
 ---
 
 ## Testing
 
-Backend tests need this project's Python environment active first — `pytest`
-is a project dependency (see `requirements.txt`), not a global tool, so
-running it outside that environment (e.g. a bare `conda activate base`) fails
-with `No module named pytest`.
-
 ```bash
-# Backend — payload codec, crypto, all 5 generators, and the live API endpoints
-
-# venv setup (./setup.sh):
+# Backend - payload codec, crypto, all 5 generators, and the live API endpoints
 source .venv/bin/activate
 pytest
 
-# conda setup:
-conda activate afeka_stego   # or whichever env has requirements.txt installed
-pytest
-
-# Frontend — config, hooks, and components
+# Frontend - config, hooks, and components
 cd frontend && npm test
 ```
 
 141 backend tests, 56 frontend tests (197 total). Backend tests run the real
-SRNet checkpoint and generators on CPU — no GPU or external dataset required;
-cover images are generated synthetically.
+SRNet checkpoint and generators on CPU - no GPU or external dataset required.
 
 ---
 
@@ -294,7 +294,7 @@ cover images are generated synthetically.
 
 | File | What it is |
 |---|---|
-| `srnet_steganogan_best.pth` | **Current best** — the deployed detector |
+| `srnet_steganogan_best.pth` | **Current best** - the deployed detector |
 | `srnet_finetuned_best.pth` | Previous checkpoint, the base the above was fine-tuned from |
 | `srnet_best_val.pth` | Best validation checkpoint from the last full training run |
 | `steganogan_dense.pth` | Converted SteganoGAN encoder weights |
@@ -302,21 +302,79 @@ cover images are generated synthetically.
 Per-epoch checkpoints and JSON training histories are also committed, so any
 reported figure can be reproduced.
 
-> `models/srnet.py` is treated as frozen — changing the architecture invalidates
+> `models/srnet.py` is treated as frozen - changing the architecture invalidates
 > every checkpoint above.
+
+---
+
+## Glossary
+
+| Term | Meaning |
+|---|---|
+| **Cover / stego** | An image before hiding data / the same image after |
+| **bpp** | Bits per pixel - how much data is hidden, relative to image size |
+| **Genome** | One generator configuration: an embedding method plus its parameters |
+| **Fool rate** | Share of a genome's stego images that the detector scores as clean |
+
+---
+
+## Key code references
+
+Permalinks below are pinned to commit
+[`bd0f5d6`](https://github.com/ItayChabra/StegAnalysis/commit/bd0f5d612a5cec592d115a785f69b9e7c147ff09)
+so the line numbers stay stable regardless of later commits on this branch.
+
+### Detection & inference
+
+- **SRNet architecture** - [`models/srnet.py#L6-L127`](https://github.com/ItayChabra/StegAnalysis/blob/bd0f5d612a5cec592d115a785f69b9e7c147ff09/models/srnet.py#L6-L127)
+  The complete detection model: triple-branch frontend and the residual stack
+  feeding a binary classifier. Every other component exists to train or query it.
+- **Sliding-window inference** - [`api/server.py#L143-L196`](https://github.com/ItayChabra/StegAnalysis/blob/bd0f5d612a5cec592d115a785f69b9e7c147ff09/api/server.py#L143-L196)
+  Turns a patch-level classifier into a whole-image verdict: 64-pixel-stride
+  scan across the image, then max-reduction of the per-patch scores to a
+  single verdict.
+
+### Adversarial-evolutionary training
+
+- **Unified Generator dispatcher** - [`generators/unified_generator.py#L24-L52`](https://github.com/ItayChabra/StegAnalysis/blob/bd0f5d612a5cec592d115a785f69b9e7c147ff09/generators/unified_generator.py#L24-L52)
+  The single call site through which every genome becomes a stego image,
+  decoupling the evolutionary search - which only manipulates parameter dicts -
+  from the five embedding implementations.
+- **Fitness function** - [`training/evolution.py#L191-L212`](https://github.com/ItayChabra/StegAnalysis/blob/bd0f5d612a5cec592d115a785f69b9e7c147ff09/training/evolution.py#L191-L212)
+  Fool rate minus a penalty that ramps up as payload capacity falls below a
+  per-method threshold. This is the in-loop score driving genome selection every
+  generation - distinct from the offline min-AUC reported by
+  `training/evaluate.py`.
+- **Diversity-aware batch construction** - [`training/batch.py#L51-L99`](https://github.com/ItayChabra/StegAnalysis/blob/bd0f5d612a5cec592d115a785f69b9e7c147ff09/training/batch.py#L51-L99) (floors), [`#L101-L129`](https://github.com/ItayChabra/StegAnalysis/blob/bd0f5d612a5cec592d115a785f69b9e7c147ff09/training/batch.py#L101-L129) (ceilings)
+  Bounds every batch from both directions: floors reserve 25% of slots for
+  S-UNIWARD, 12% for SteganoGAN and 15% of the remainder for low-capacity
+  genomes before any EA-driven genome is drawn; ceilings then cap how many slots
+  any one niche or family may take. Because the dispatcher can regenerate a
+  stego image from any genome on demand, the floors act as *generative* replay
+  against catastrophic forgetting.
+- **Performance-weighted sampler** - [`training/finetune.py#L103-L142`](https://github.com/ItayChabra/StegAnalysis/blob/bd0f5d612a5cec592d115a785f69b9e7c147ff09/training/finetune.py#L103-L142) (min-AUC table + loader), [`#L184-L204`](https://github.com/ItayChabra/StegAnalysis/blob/bd0f5d612a5cec592d115a785f69b9e7c147ff09/training/finetune.py#L184-L204) (`_build_sampler`)
+  Replaces the EA during fine-tuning: sampling weight per strategy is
+  proportional to `1 - its last measured min-AUC`, with a hard floor. The
+  min-AUC table is loaded from evaluate.py's own output when available,
+  falling back to a hardcoded snapshot otherwise, so a fresh evaluation run
+  is picked up automatically. Static quotas alone proved insufficient -
+  letting the highest-fool-rate generator dominate collapsed validation
+  accuracy from 83% to 63%.
 
 ---
 
 ## Credits & licence
 
-- **SteganoGAN** — networks under `generators/steganogan_src/` are vendored from
+Released under the MIT licence - see [`LICENSE`](LICENSE).
+
+- **SteganoGAN** - networks under `generators/steganogan_src/` are vendored from
   [DAI-Lab/SteganoGAN](https://github.com/DAI-Lab/SteganoGAN), MIT licence,
   © 2019 MIT Data To AI Lab.
-- **S-UNIWARD** — cost model after Holub, Fridrich & Denemark, *Universal
+- **S-UNIWARD** - cost model after Holub, Fridrich & Denemark, *Universal
   distortion function for steganography in an arbitrary domain* (2014).
-- **SRNet** — architecture after Boroumand, Chen & Fridrich, *Deep residual
+- **SRNet** - architecture after Boroumand, Chen & Fridrich, *Deep residual
   network for steganalysis of digital images* (2019).
-- **Datasets** — BOSSbase 1.01, BOWS2, Flickr30k, and public Kaggle
+- **Datasets** - BOSSbase 1.01, BOWS2, Flickr30k, and public Kaggle
   steganography test sets. Image data is not committed to the repository.
 
 Development conventions and internal notes are in [`CLAUDE.md`](CLAUDE.md).
