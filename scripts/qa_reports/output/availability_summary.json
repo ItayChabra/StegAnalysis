@@ -1,0 +1,18 @@
+{
+  "methodology": "success_rate = successful HTTP 200 responses / total requests attempted during a fixed wall-clock load window. This is a request-success-rate measurement, NOT continuous-uptime/SLA availability -- no external monitor, no probing outside the load window.",
+  "port": 8011,
+  "concurrency": 4,
+  "duration_target_s": 180,
+  "duration_actual_s": 181.05,
+  "request_timeout_s": 15.0,
+  "n_requests_total": 666,
+  "outcome_counts": {
+    "success": 666
+  },
+  "success_rate": 1.0,
+  "success_rate_percent": 100.0,
+  "throughput_req_per_s": 3.678,
+  "server_process_alive_after_test": true,
+  "health_check_after_test_ok": true,
+  "server_crashed_or_needed_restart": false
+}

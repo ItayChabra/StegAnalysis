@@ -93,8 +93,12 @@ DEFAULT_CHECKPOINT = 'srnet_best_val.pth'
 # Strategies that scored ≥ 0.98 get a floor weight of 0.02 so they never
 # vanish from the batch and the model doesn't forget them.
 #
-# To update weights: paste your latest min_auc_summary.json values into
-# MIN_AUC_FROM_EVAL below and the menu rebuilds automatically.
+# _load_min_auc() reads evaluate.py's own output (evaluation_results/
+# min_auc_summary.json) at sampler-build time, so a fresh evaluate.py run is
+# picked up automatically. MIN_AUC_FROM_EVAL below is the fallback used only
+# when that file is missing or unreadable — e.g. a fresh checkout, or before
+# evaluate.py has ever been run — so the fine-tune script still works out of
+# the box. To refresh the fallback itself, paste the latest summary here.
 
 MIN_AUC_FROM_EVAL = {
     # Run 21 epoch-30 evaluation (evaluate.py, 300 images/strategy, 3 configs each)
@@ -108,6 +112,34 @@ MIN_AUC_FROM_EVAL = {
     "fft_high":       0.8401,
     "adaptive_suniward": 0.5293,  # ~random: canonical S-UNIWARD unlearned — highest priority
 }
+
+_MIN_AUC_SUMMARY_PATH = os.path.join(
+    os.path.dirname(__file__), 'evaluation_results', 'min_auc_summary.json')
+
+
+def _load_min_auc():
+    """Return the latest per-strategy min-AUC table.
+
+    Prefers evaluate.py's own JSON output; falls back to the hardcoded
+    MIN_AUC_FROM_EVAL snapshot above if that file doesn't exist yet or fails
+    to parse as a {strategy: number} mapping.
+    """
+    try:
+        with open(_MIN_AUC_SUMMARY_PATH) as f:
+            data = json.load(f)
+        if isinstance(data, dict) and data and all(
+                isinstance(v, (int, float)) for v in data.values()):
+            print(f"[SAMPLER] Loaded min-AUC table from {_MIN_AUC_SUMMARY_PATH}")
+            return data
+        print(f"[SAMPLER] {_MIN_AUC_SUMMARY_PATH} has an unexpected format; "
+              f"using the hardcoded MIN_AUC_FROM_EVAL fallback.")
+    except FileNotFoundError:
+        print(f"[SAMPLER] {_MIN_AUC_SUMMARY_PATH} not found; "
+              f"using the hardcoded MIN_AUC_FROM_EVAL fallback.")
+    except (OSError, json.JSONDecodeError) as e:
+        print(f"[SAMPLER] Could not read {_MIN_AUC_SUMMARY_PATH} ({e}); "
+              f"using the hardcoded MIN_AUC_FROM_EVAL fallback.")
+    return MIN_AUC_FROM_EVAL
 
 # Reference configs — one representative per strategy. capacity_ratio is TRUE
 # bits-per-pixel; strength/capacity match evaluate.py's mid reference point so
@@ -154,9 +186,10 @@ def _build_sampler():
     Returns (strategy_names, configs, weights) with weights normalised to sum=1.
     Weak strategies (low AUC) get higher weight; strong ones get a floor of 0.02.
     """
+    min_auc_table = _load_min_auc()
     names, configs, weights = [], [], []
     for name, config in _STRATEGY_CONFIGS:
-        min_auc = MIN_AUC_FROM_EVAL.get(name, 0.90)
+        min_auc = min_auc_table.get(name, 0.90)
         w = max(0.02, 1.0 - min_auc)
         names.append(name)
         configs.append(config)

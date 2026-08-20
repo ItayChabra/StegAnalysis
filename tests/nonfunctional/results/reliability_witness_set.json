@@ -1,0 +1,72 @@
+{
+  "checkpoint": "/home/linuxu/PycharmProjects/StegAnalysis/srnet_steganogan_best.pth",
+  "device": "cuda",
+  "n_clean": 500,
+  "n_stego_requested": 500,
+  "n_stego_generated": 500,
+  "gen_failures": [],
+  "clean_source_mix": {
+    "flickr30k": 355,
+    "BossBase and BOWS2": 145
+  },
+  "stego_method_mix": {
+    "lsb": 100,
+    "dct": 100,
+    "fft": 100,
+    "adaptive": 100,
+    "steganogan": 100
+  },
+  "primary_definition": "positive = verdict == STEGO_DETECTED (max_score > 0.80)",
+  "primary_metrics": {
+    "tp": 384,
+    "fp": 8,
+    "tn": 492,
+    "fn": 116,
+    "accuracy": 0.876,
+    "recall": 0.768,
+    "precision": 0.9796,
+    "f1": 0.861
+  },
+  "secondary_definition": "positive = verdict in {STEGO_DETECTED, SUSPICIOUS} (max_score > 0.50)",
+  "secondary_metrics": {
+    "tp": 423,
+    "fp": 77,
+    "tn": 423,
+    "fn": 77,
+    "accuracy": 0.846,
+    "recall": 0.846,
+    "precision": 0.846,
+    "f1": 0.846
+  },
+  "per_method_detection_strict": {
+    "lsb": {
+      "n": 100,
+      "detected": 95,
+      "rate": 0.95
+    },
+    "dct": {
+      "n": 100,
+      "detected": 97,
+      "rate": 0.97
+    },
+    "fft": {
+      "n": 100,
+      "detected": 88,
+      "rate": 0.88
+    },
+    "adaptive": {
+      "n": 100,
+      "detected": 8,
+      "rate": 0.08
+    },
+    "steganogan": {
+      "n": 100,
+      "detected": 96,
+      "rate": 0.96
+    }
+  },
+  "acc_threshold": 0.9,
+  "rec_threshold": 0.85,
+  "acc_pass": false,
+  "rec_pass": false
+}

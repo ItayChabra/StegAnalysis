@@ -1,0 +1,118 @@
+{
+  "n_total_tests": 206,
+  "by_category": {
+    "backend": {
+      "pass": 141,
+      "fail": 0,
+      "skip": 0
+    },
+    "non-functional": {
+      "pass": 8,
+      "fail": 1,
+      "skip": 0
+    },
+    "frontend": {
+      "pass": 56,
+      "fail": 0,
+      "skip": 0
+    }
+  },
+  "by_file": {
+    "tests/test_api.py": {
+      "category": "backend",
+      "pass": 26,
+      "fail": 0,
+      "skip": 0
+    },
+    "tests/test_codec.py": {
+      "category": "backend",
+      "pass": 35,
+      "fail": 0,
+      "skip": 0
+    },
+    "tests/test_crypto.py": {
+      "category": "backend",
+      "pass": 42,
+      "fail": 0,
+      "skip": 0
+    },
+    "tests/test_generators.py": {
+      "category": "backend",
+      "pass": 38,
+      "fail": 0,
+      "skip": 0
+    },
+    "tests/nonfunctional/test_extensibility.py": {
+      "category": "non-functional",
+      "pass": 4,
+      "fail": 0,
+      "skip": 0
+    },
+    "tests/nonfunctional/test_security_malformed_upload.py": {
+      "category": "non-functional",
+      "pass": 3,
+      "fail": 0,
+      "skip": 0
+    },
+    "tests/nonfunctional/test_performance.py": {
+      "category": "non-functional",
+      "pass": 1,
+      "fail": 0,
+      "skip": 0
+    },
+    "tests/nonfunctional/test_reliability_witness_set.py": {
+      "category": "non-functional",
+      "pass": 0,
+      "fail": 1,
+      "skip": 0
+    },
+    "src/config/methods.test.js": {
+      "category": "frontend",
+      "pass": 14,
+      "fail": 0,
+      "skip": 0
+    },
+    "src/hooks/useAnalysis.test.js": {
+      "category": "frontend",
+      "pass": 4,
+      "fail": 0,
+      "skip": 0
+    },
+    "src/hooks/useCapacity.test.js": {
+      "category": "frontend",
+      "pass": 7,
+      "fail": 0,
+      "skip": 0
+    },
+    "src/hooks/useEmbed.test.js": {
+      "category": "frontend",
+      "pass": 5,
+      "fail": 0,
+      "skip": 0
+    },
+    "src/hooks/useExtract.test.js": {
+      "category": "frontend",
+      "pass": 8,
+      "fail": 0,
+      "skip": 0
+    },
+    "src/components/Embed/CapacityMeter.test.jsx": {
+      "category": "frontend",
+      "pass": 6,
+      "fail": 0,
+      "skip": 0
+    },
+    "src/components/Embed/GeneratorPicker.test.jsx": {
+      "category": "frontend",
+      "pass": 5,
+      "fail": 0,
+      "skip": 0
+    },
+    "src/components/Embed/ParamControls.test.jsx": {
+      "category": "frontend",
+      "pass": 7,
+      "fail": 0,
+      "skip": 0
+    }
+  }
+}

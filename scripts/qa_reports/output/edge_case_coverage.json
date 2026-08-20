@@ -1,0 +1,90 @@
+{
+  "n_cases": 16,
+  "counts": {
+    "full": 10,
+    "partial": 4,
+    "gap": 2
+  },
+  "cases": [
+    {
+      "case": "Valid images",
+      "status": "full",
+      "evidence": "tests/test_api.py:test_analyze_returns_valid_response; tests/test_generators.py:test_run_produces_valid_stego[5 methods]"
+    },
+    {
+      "case": "Invalid formats",
+      "status": "full",
+      "evidence": "tests/test_api.py:test_analyze_rejects_invalid_image (400, Invalid image file)"
+    },
+    {
+      "case": "Corrupted / malicious content",
+      "status": "full",
+      "evidence": "tests/nonfunctional/test_security_malformed_upload.py: shell+XSS+SQLi+EICAR payload disguised as .jpg, rejected 400 on /analyze and /embed"
+    },
+    {
+      "case": "Clean ground truth (labelled)",
+      "status": "full",
+      "evidence": "tests/nonfunctional/test_reliability_witness_set.py: 500 held-out-split clean images"
+    },
+    {
+      "case": "Stego ground truth (labelled)",
+      "status": "full",
+      "evidence": "tests/nonfunctional/test_reliability_witness_set.py: 500 stego, 100/method x 5 methods"
+    },
+    {
+      "case": "Non-square images",
+      "status": "full",
+      "evidence": "tests/test_generators.py:test_run_preserves_non_square_non_256_shape[5 methods] (180x300); tests/test_api.py:test_non_recoverable_embed_handles_non_256_shape (steganogan, via API)"
+    },
+    {
+      "case": "Very small images",
+      "status": "full",
+      "evidence": "tests/test_api.py:test_analyze_handles_small_image (40x40, below one 256 window, pad path)"
+    },
+    {
+      "case": "Very large images",
+      "status": "gap",
+      "evidence": "No test uses an image above ordinary photo size (largest in-suite input is ~500x375 flickr30k); no boundary test for e.g. multi-megapixel uploads."
+    },
+    {
+      "case": "Borderline confidence (~50%)",
+      "status": "gap",
+      "evidence": "test_analyze_returns_valid_response only asserts verdict is one of the 3 enum values and confidence in [0,1] -- no test forces a score near the 0.50 SUSPICIOUS/CLEAN boundary to check classification at the edge."
+    },
+    {
+      "case": "Wrong password",
+      "status": "full",
+      "evidence": "tests/test_crypto.py:test_wrong_passphrase_raises_decryption_error[3 auth ciphers]; tests/test_generators.py:test_wrong_passphrase_fails_after_real_embed[3 methods]; tests/test_api.py:test_wrong_passphrase_returns_422_bad_key"
+    },
+    {
+      "case": "Tampered ciphertext",
+      "status": "partial",
+      "evidence": "tests/test_crypto.py:test_tampered_ciphertext_raises_decryption_error[3 auth ciphers] -- crypto-unit only; no test tampers bytes of a real embedded stego image and extracts via /api/extract"
+    },
+    {
+      "case": "Truncated payload headers",
+      "status": "partial",
+      "evidence": "tests/test_codec.py:test_decode_rejects_short_data -- codec-unit only; no /api/extract test against a genuinely truncated/short stego upload"
+    },
+    {
+      "case": "CRC mismatches",
+      "status": "full",
+      "evidence": "tests/test_codec.py:test_decode_rejects_crc_mismatch (synthetic bit flip); tests/test_generators.py:test_dct_bit_corruption_is_caught_by_crc_not_silently_accepted (real DCT precision-loss case, not synthetic)"
+    },
+    {
+      "case": "Malformed magic bytes",
+      "status": "partial",
+      "evidence": "tests/test_codec.py:test_decode_rejects_missing_magic -- codec-unit only; no API-level equivalent (though /api/extract shares the same codec.decode() path)"
+    },
+    {
+      "case": "Oversized message vs. capacity",
+      "status": "full",
+      "evidence": "tests/test_generators.py:test_embed_payload_raises_when_message_exceeds_capacity[3 methods]; tests/test_api.py:test_embed_message_too_large_returns_400"
+    },
+    {
+      "case": "5 methods x codec/crypto combinations",
+      "status": "partial",
+      "evidence": "Full pixel-level embed->encrypt->extract->decrypt integration (test_full_framed_round_trip_correct_or_cleanly_detected) covers only {lsb,dct,fft} x {none,aes256gcm} = 6/12 recoverable combos; chacha20poly1305 and fernet are untested at this exact integration layer (each cipher IS covered standalone: crypto-unit tests all 4 generically, codec-framing test covers all 4 x {lsb,dct,fft}=12/12 at the frame/decode layer, just not through a real pixel round trip). adaptive/steganogan correctly have no cipher combos (architecturally non-recoverable; verified by test_non_recoverable_embed_reports_correctly)."
+    }
+  ]
+}

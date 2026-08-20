@@ -25,3 +25,7 @@ scipy
 
 # --- Steganography payload encryption ---
 cryptography
+
+# --- QA / testing ---
+pytest
+httpx

@@ -3,6 +3,7 @@ from generators.dct_gen        import DCTGenerator
 from generators.fft_gen        import FFTGenerator
 from generators.adaptive_gen   import AdaptiveGenerator
 from generators.steganogan_gen import SteganoGANGenerator
+from generators.dummy_gen       import DummyGen
 
 
 class UnifiedGenerator:
@@ -27,6 +28,7 @@ class UnifiedGenerator:
             'fft':        FFTGenerator(),
             'adaptive':   AdaptiveGenerator(),
             'steganogan': SteganoGANGenerator(),
+            'dummy':      DummyGen(),
         }
 
     def generate_stego(self, cover_input, output_path, config):
