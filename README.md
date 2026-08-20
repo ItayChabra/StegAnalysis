@@ -321,38 +321,38 @@ reported figure can be reproduced.
 ## Key code references
 
 Permalinks below are pinned to commit
-[`bd0f5d6`](https://github.com/ItayChabra/StegAnalysis/commit/bd0f5d612a5cec592d115a785f69b9e7c147ff09)
+[`b84900d`](https://github.com/ItayChabra/StegAnalysis/commit/b84900d0824061fb849bf15a940655ab909a8d83)
 so the line numbers stay stable regardless of later commits on this branch.
 
 ### Detection & inference
 
-- **SRNet architecture** - [`models/srnet.py#L6-L127`](https://github.com/ItayChabra/StegAnalysis/blob/bd0f5d612a5cec592d115a785f69b9e7c147ff09/models/srnet.py#L6-L127)
+- **SRNet architecture** - [`models/srnet.py#L6-L127`](https://github.com/ItayChabra/StegAnalysis/blob/b84900d0824061fb849bf15a940655ab909a8d83/models/srnet.py#L6-L127)
   The complete detection model: triple-branch frontend and the residual stack
   feeding a binary classifier. Every other component exists to train or query it.
-- **Sliding-window inference** - [`api/server.py#L143-L196`](https://github.com/ItayChabra/StegAnalysis/blob/bd0f5d612a5cec592d115a785f69b9e7c147ff09/api/server.py#L143-L196)
+- **Sliding-window inference** - [`api/server.py#L143-L196`](https://github.com/ItayChabra/StegAnalysis/blob/b84900d0824061fb849bf15a940655ab909a8d83/api/server.py#L143-L196)
   Turns a patch-level classifier into a whole-image verdict: 64-pixel-stride
   scan across the image, then max-reduction of the per-patch scores to a
   single verdict.
 
 ### Adversarial-evolutionary training
 
-- **Unified Generator dispatcher** - [`generators/unified_generator.py#L24-L52`](https://github.com/ItayChabra/StegAnalysis/blob/bd0f5d612a5cec592d115a785f69b9e7c147ff09/generators/unified_generator.py#L24-L52)
+- **Unified Generator dispatcher** - [`generators/unified_generator.py#L24-L52`](https://github.com/ItayChabra/StegAnalysis/blob/b84900d0824061fb849bf15a940655ab909a8d83/generators/unified_generator.py#L24-L52)
   The single call site through which every genome becomes a stego image,
   decoupling the evolutionary search - which only manipulates parameter dicts -
   from the five embedding implementations.
-- **Fitness function** - [`training/evolution.py#L191-L212`](https://github.com/ItayChabra/StegAnalysis/blob/bd0f5d612a5cec592d115a785f69b9e7c147ff09/training/evolution.py#L191-L212)
+- **Fitness function** - [`training/evolution.py#L191-L212`](https://github.com/ItayChabra/StegAnalysis/blob/b84900d0824061fb849bf15a940655ab909a8d83/training/evolution.py#L191-L212)
   Fool rate minus a penalty that ramps up as payload capacity falls below a
   per-method threshold. This is the in-loop score driving genome selection every
   generation - distinct from the offline min-AUC reported by
   `training/evaluate.py`.
-- **Diversity-aware batch construction** - [`training/batch.py#L51-L99`](https://github.com/ItayChabra/StegAnalysis/blob/bd0f5d612a5cec592d115a785f69b9e7c147ff09/training/batch.py#L51-L99) (floors), [`#L101-L129`](https://github.com/ItayChabra/StegAnalysis/blob/bd0f5d612a5cec592d115a785f69b9e7c147ff09/training/batch.py#L101-L129) (ceilings)
+- **Diversity-aware batch construction** - [`training/batch.py#L51-L99`](https://github.com/ItayChabra/StegAnalysis/blob/b84900d0824061fb849bf15a940655ab909a8d83/training/batch.py#L51-L99) (floors), [`#L101-L129`](https://github.com/ItayChabra/StegAnalysis/blob/b84900d0824061fb849bf15a940655ab909a8d83/training/batch.py#L101-L129) (ceilings)
   Bounds every batch from both directions: floors reserve 25% of slots for
   S-UNIWARD, 12% for SteganoGAN and 15% of the remainder for low-capacity
   genomes before any EA-driven genome is drawn; ceilings then cap how many slots
   any one niche or family may take. Because the dispatcher can regenerate a
   stego image from any genome on demand, the floors act as *generative* replay
   against catastrophic forgetting.
-- **Performance-weighted sampler** - [`training/finetune.py#L103-L142`](https://github.com/ItayChabra/StegAnalysis/blob/bd0f5d612a5cec592d115a785f69b9e7c147ff09/training/finetune.py#L103-L142) (min-AUC table + loader), [`#L184-L204`](https://github.com/ItayChabra/StegAnalysis/blob/bd0f5d612a5cec592d115a785f69b9e7c147ff09/training/finetune.py#L184-L204) (`_build_sampler`)
+- **Performance-weighted sampler** - [`training/finetune.py#L103-L142`](https://github.com/ItayChabra/StegAnalysis/blob/b84900d0824061fb849bf15a940655ab909a8d83/training/finetune.py#L103-L142) (min-AUC table + loader), [`#L184-L204`](https://github.com/ItayChabra/StegAnalysis/blob/b84900d0824061fb849bf15a940655ab909a8d83/training/finetune.py#L184-L204) (`_build_sampler`)
   Replaces the EA during fine-tuning: sampling weight per strategy is
   proportional to `1 - its last measured min-AUC`, with a hard floor. The
   min-AUC table is loaded from evaluate.py's own output when available,
