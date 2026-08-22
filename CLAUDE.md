@@ -41,7 +41,13 @@ The project consists of:
 │   │                             Daubechies-8 back-convolution cost map
 │   ├── steganogan_gen.py      ← GAN-learned embedding (frozen pretrained encoder)
 │   ├── steganogan_src/        ← vendored DAI-Lab networks (MIT)
+│   ├── dummy_gen.py           ← minimal reference generator used by the
+│   │                             extensibility test (tests/nonfunctional/)
 │   └── unified_generator.py   ← dispatcher: routes gen_type to the right generator
+├── payload/
+│   ├── codec.py                ← self-describing header framing (magic, method,
+│   │                              cipher, length, salt, nonce, params, CRC-32)
+│   └── crypto.py                ← AEAD/Fernet encrypt-decrypt
 ├── training/
 │   ├── config.py              ← ALL hyperparameters and constants — edit here for tuning
 │   ├── train_hybrid.py        ← main training loop (called by main.py)
@@ -56,15 +62,24 @@ The project consists of:
 │   └── evaluation_results/    ← JSON metrics written by evaluate.py
 ├── frontend/                  ← React/Vite web application
 │   ├── src/
-│   │   ├── components/
+│   │   ├── components/        ← co-located *.test.jsx (Vitest)
 │   │   ├── pages/
-│   │   ├── hooks/
+│   │   ├── hooks/              ← co-located *.test.js (Vitest)
 │   │   ├── api/
 │   │   └── main.jsx
 │   ├── index.html
 │   └── package.json
-└── api/
-    └── server.py              ← FastAPI server entry point
+├── api/
+│   └── server.py              ← FastAPI server entry point
+├── tests/                     ← backend pytest suite (see §9 Testing)
+│   ├── conftest.py
+│   ├── test_api.py / test_codec.py / test_crypto.py / test_generators.py
+│   └── nonfunctional/         ← Chapter 10.2 QA suite (perf, reliability,
+│                                 security, extensibility)
+├── scripts/qa_reports/        ← QA report generation (charts/CSVs built from
+│                                 real pytest + Vitest output, not hand-typed)
+├── pytest.ini
+└── docs/screenshots/          ← README images
 ```
 
 ---
@@ -133,7 +148,10 @@ freq_band/strength           (fft)   capacity (adaptive)
 Response includes `job_id`, `stego_url`, `psnr`, `capacity_bytes`, `used_bytes`, `recoverable`, and `extract_hint` (the settings needed to reveal it).
 
 ### POST `/api/extract`
-Recovers a hidden message. Auto-detects the method (LSB/DCT/FFT) for default settings; non-default `strength`/`step` must be supplied (the embed `extract_hint` carries these). Returns `{message, method, cipher, bytes}`, or a typed error: `404 no_payload`, `422 bad_key`.
+Reveal-only: locates the hidden payload and returns it. Auto-detects the method (LSB/DCT/FFT) for default settings; non-default `strength`/`step` must be supplied (the embed `extract_hint` carries these). If the payload is unencrypted, the response includes the plaintext `message` directly; otherwise decryption is a separate step so the UI can show the ciphertext before asking for a passphrase. Returns `{method, cipher, cipher_id, encrypted, bytes, ciphertext_b64, salt_b64, nonce_b64, message?}`, or `404 no_payload`.
+
+### POST `/api/decrypt`
+Second step of the reveal flow: decrypts a `ciphertext_b64` previously returned by `/api/extract`, given `cipher`, `passphrase`, `salt_b64`, `nonce_b64`. Returns `{message, cipher, encrypted, bytes}`, or a typed error: `400` malformed base64/cipher name, `422 bad_key`.
 
 ### POST `/api/capacity`
 Given `file` + `method` (+ params), returns the max recoverable payload (`max_message_bytes`) for that image.
@@ -142,7 +160,10 @@ Given `file` + `method` (+ params), returns the max recoverable payload (`max_me
 `payload/codec.py` frames a 52-byte self-describing header (magic, method, cipher, length, salt, nonce, params, CRC-32) ahead of the ciphertext; `payload/crypto.py` does the AEAD/Fernet crypto. Each generator exposes `embed_payload`/`extract_payload` (deterministic positions) **separate from** the training `run()`/`embed()` paths, which are unchanged.
 
 ### Image GET endpoints (per `job_id`)
-`/api/original`, `/api/stego`, `/api/heatmap`, `/api/noisemap` (SRM residual; `?source=stego` in embed flow), `/api/spectrum` (log-FFT + band rings; `?source=`), `/api/diff` (cover↔stego pixel diff, embed flow), `/api/bitplane/{n}` (bit plane 0–7; `?source=`). All return PNG.
+`/api/original`, `/api/stego`, `/api/heatmap`, `/api/noisemap` (SRM residual; `?source=stego` in embed flow), `/api/spectrum` (log-FFT + band rings; `?source=`), `/api/diff` (cover↔stego pixel diff, embed flow), `/api/bitplane/{n}` (bit plane 0–7; `?source=`), `/api/sanitize` (Gaussian-blur-based steg-stripped copy of the original). All return PNG.
+
+### GET `/health`
+Liveness probe, no auth or job state. Used by `scripts/qa_reports/availability_load_test.py` to confirm the server is up before driving load against it.
 
 ---
 
@@ -193,7 +214,28 @@ python test_kaggle.py --checkpoint srnet_steganogan_best.pth --images 200
 
 ---
 
-## 8. Critical Protected Files
+## 8. Testing
+
+```bash
+# Backend — payload codec, crypto, all 5 generators, live API endpoints
+pytest                       # 141 tests, CPU-only, no external dataset
+
+# Frontend — config, hooks, components
+cd frontend && npm test      # Vitest, 56 tests
+```
+
+`tests/conftest.py` generates cover images synthetically (fixed-seed noise) rather than reading from `data/`, so the default suite runs in a fresh clone with no dataset present. The session-scoped `api_client` fixture loads the real `srnet_steganogan_best.pth` checkpoint once and reuses it across every API test.
+
+**`tests/nonfunctional/`** is the Chapter 10.2 non-functional QA suite — one file per row: performance, reliability (blind witness set drawn from the held-out TEST split in `dataset_split.json`), security (malformed/malicious upload), extensibility (adds `generators/dummy_gen.py` as a new generator without touching the dispatcher). Only the fast, no-external-data tests (extensibility, security) run in the default `pytest` invocation; tests needing `data/raw/flickr30k` are skipped unless both the directory exists and `RUN_NFR_TESTS=1` is set:
+```bash
+RUN_NFR_TESTS=1 pytest tests/nonfunctional/test_performance.py -s -m slow
+```
+
+**`scripts/qa_reports/`** turns real, freshly-generated test output (JUnit XML from pytest, Vitest's JSON reporter, live HTTP timing against a real `uvicorn` subprocess) into the charts/CSVs/summary JSON in `scripts/qa_reports/output/` — nothing here is hand-typed. Re-run a script rather than hand-editing its output when the underlying test suite changes.
+
+---
+
+## 9. Critical Protected Files
 
 Unless explicitly instructed otherwise by the user, do not modify the following files:
 
